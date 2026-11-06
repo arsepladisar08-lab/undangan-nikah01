@@ -1,0 +1,6 @@
+{
+  "name": "The Wedding of Bagaskara & Sekar",
+  "description": "Royal Javanese Islamic Wedding Invitation with Parallax, Gamelan Ambience, RSVP and Interactive Features",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

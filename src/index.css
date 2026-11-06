@@ -1,0 +1,184 @@
+@import "tailwindcss";
+
+@theme {
+  --color-keraton-950: #1f1610;
+  --color-keraton-900: #2c1e14;
+  --color-keraton-800: #422f20;
+  --color-keraton-700: #5c432e;
+
+  --color-gold-50: #fdfaf2;
+  --color-gold-100: #f9f1dd;
+  --color-gold-200: #f0deb4;
+  --color-gold-300: #e2c37d;
+  --color-gold-400: #cfa349;
+  --color-gold-500: #b58428;
+  --color-gold-600: #8f6419;
+  --color-gold-700: #6e4b12;
+
+  --color-ivory: #fdfbf7;
+  --color-ivory-warm: #f6f0e4;
+  --color-ivory-pearl: #efe6d5;
+
+  --font-cinzel: 'Cinzel', serif;
+  --font-serif: 'Cormorant Garamond', serif;
+  --font-sans: 'Plus Jakarta Sans', sans-serif;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f6f0e4;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #cfa349, #8f6419);
+  border-radius: 4px;
+}
+
+/* Light Batik Kawung SVG Background Pattern */
+.bg-batik-light {
+  background-color: #fdfbf7;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23b58428' stroke-width='0.6' stroke-opacity='0.14'%3E%3Cpath d='M30 0 C45 15 45 15 60 30 C45 45 45 45 30 60 C15 45 15 45 0 30 C15 15 15 15 30 0 Z'/%3E%3Ccircle cx='30' cy='30' r='12'/%3E%3Ccircle cx='30' cy='30' r='3' fill='%23b58428' fill-opacity='0.10'/%3E%3Cpath d='M30 0 C22 15 22 45 30 60'/%3E%3Cpath d='M30 0 C38 15 38 45 30 60'/%3E%3Cpath d='M0 30 C15 22 45 22 60 30'/%3E%3Cpath d='M0 30 C15 38 45 38 60 30'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.bg-batik-cream {
+  background-color: #f6f0e4;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%238f6419' stroke-width='0.6' stroke-opacity='0.12'%3E%3Cpath d='M30 0 C45 15 45 15 60 30 C45 45 45 45 30 60 C15 45 15 45 0 30 C15 15 15 15 30 0 Z'/%3E%3Ccircle cx='30' cy='30' r='12'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Rich Royal Gold & Bronze Text Gradient for Light Backgrounds */
+.text-gold-gradient {
+  background: linear-gradient(135deg, #5c4010 0%, #9c6f19 35%, #c59233 65%, #6e4b12 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Dynamic Liquid Gold Shimmer Animation */
+@keyframes goldShimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+.text-gold-shimmer {
+  background: linear-gradient(90deg, #5c4010 0%, #9c6f19 25%, #eed89b 50%, #b58428 75%, #5c4010 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: goldShimmer 5s ease-in-out infinite;
+}
+
+/* Soft Gold Card Border & Elevation for Light Mode */
+.card-luxury-light {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(181, 132, 40, 0.28);
+  box-shadow: 0 18px 45px -12px rgba(143, 100, 25, 0.12), 0 4px 16px -4px rgba(44, 30, 20, 0.05);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease;
+}
+
+.card-luxury-light:hover {
+  border-color: rgba(181, 132, 40, 0.55);
+}
+
+/* Micro-interaction Card Sheen Sweep */
+.card-sheen {
+  position: relative;
+  overflow: hidden;
+}
+.card-sheen::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -60%;
+  width: 40%;
+  height: 200%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 100%
+  );
+  transform: rotate(25deg);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.card-sheen:hover::after {
+  opacity: 1;
+  animation: sheenSlide 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes sheenSlide {
+  0% {
+    transform: translateX(0%) rotate(25deg);
+  }
+  100% {
+    transform: translateX(550%) rotate(25deg);
+  }
+}
+
+/* Floating Animations */
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-10px) rotate(1.2deg); }
+}
+.animate-float {
+  animation: floatSlow 7s ease-in-out infinite;
+}
+
+@keyframes floatGentle {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+.animate-float-gentle {
+  animation: floatGentle 4.5s ease-in-out infinite;
+}
+
+/* Gunungan Subtle Glow */
+@keyframes pulseGlow {
+  0%, 100% { filter: drop-shadow(0 6px 14px rgba(181, 132, 40, 0.22)); }
+  50% { filter: drop-shadow(0 10px 24px rgba(181, 132, 40, 0.48)); }
+}
+.gunungan-glow {
+  animation: pulseGlow 5s ease-in-out infinite;
+}
+
+/* Continuous Looping Rotations for Javanese Mandala Objects */
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+  animation: spinSlow 40s linear infinite;
+}
+
+@keyframes spinReverseSlow {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+.animate-spin-reverse-slow {
+  animation: spinReverseSlow 30s linear infinite;
+}
+
+@keyframes pulseBreathe {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+.animate-breathe {
+  animation: pulseBreathe 5s ease-in-out infinite;
+}
+
+/* Number Flip / Tick Animation */
+@keyframes numberPop {
+  0% { transform: translateY(6px); opacity: 0.3; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.animate-number-pop {
+  animation: numberPop 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
