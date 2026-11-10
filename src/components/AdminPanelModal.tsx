@@ -172,7 +172,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           initDefaultGuests();
         }
       } else {
-        initDefaultGuests(savedDomain);
+        initDefaultGuests();
       }
     } catch {
       initDefaultGuests();
@@ -530,6 +530,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       onShowToast(err instanceof Error ? err.message : 'Gagal menyalin Code.gs. Buka file di GitHub dan salin secara manual.');
     }
   };
+
+  if (!isOpen) return null;
+
+  const categories = ['All', 'Hero', 'Mempelai', 'Cerita Cinta', 'Galeri'];
+  const filteredConfigs = PHOTO_SLOT_CONFIGS.filter(
+    (cfg) => selectedCategory === 'All' || cfg.section === selectedCategory
+  );
 
   return (
     <div
