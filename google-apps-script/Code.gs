@@ -53,7 +53,7 @@ function doPost(e) {
     var action = String(data.action || "");
 
     if (action === "adminLogin") {
-      return json_(createAdminSession_(String(data.pin || "")));
+      return json_(createAdminSession_(String(data.pin || ""), String(data.clientId || "")));
     }
     if (action === "saveRsvp") {
       return json_({ status: "success", data: saveRsvp_(data.rsvp || {}) });
@@ -118,18 +118,21 @@ function setAdminPin_(pin) {
   }
   var salt = Utilities.getUuid() + Utilities.getUuid();
   var hash = sha256Hex_(salt + ":" + pin);
-  PropertiesService.getScriptProperties().setProperties({
-    ADMIN_PIN_SALT: salt,
-    ADMIN_PIN_HASH: hash
-  }, true);
-  CacheService.getScriptCache().remove("admin_login_failures");
-  CacheService.getScriptCache().remove("admin_login_cooldown");
+  var properties = PropertiesService.getScriptProperties();
+  properties.setProperty("ADMIN_PIN_SALT", salt);
+  properties.setProperty("ADMIN_PIN_HASH", hash);
 }
 
-function createAdminSession_(pin) {
+function createAdminSession_(pin, clientId) {
   var cache = CacheService.getScriptCache();
-  if (cache.get("admin_login_cooldown")) {
-    return { status: "error", message: "Terlalu banyak percobaan. Coba kembali setelah 15 menit." };
+  // Apps Script Web App events do not expose a dependable client IP.
+  // Scope the cooldown to a browser-generated identifier rather than locking out every owner.
+  var safeClientId = String(clientId || "anonymous").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80) || "anonymous";
+  var attemptKey = "admin_login_" + sha256Hex_(safeClientId);
+  var failuresKey = attemptKey + "_failures";
+  var cooldownKey = attemptKey + "_cooldown";
+  if (cache.get(cooldownKey)) {
+    return { status: "error", message: "Terlalu banyak percobaan dari browser ini. Coba kembali setelah 15 menit." };
   }
   var props = PropertiesService.getScriptProperties();
   var salt = props.getProperty("ADMIN_PIN_SALT");
@@ -140,16 +143,16 @@ function createAdminSession_(pin) {
 
   var actual = sha256Hex_(salt + ":" + pin);
   if (!constantTimeEqual_(actual, expected)) {
-    var failures = Number(cache.get("admin_login_failures") || 0) + 1;
-    cache.put("admin_login_failures", String(failures), ADMIN_LOGIN_COOLDOWN_SECONDS);
+    var failures = Number(cache.get(failuresKey) || 0) + 1;
+    cache.put(failuresKey, String(failures), ADMIN_LOGIN_COOLDOWN_SECONDS);
     if (failures >= ADMIN_LOGIN_MAX_FAILURES) {
-      cache.put("admin_login_cooldown", "1", ADMIN_LOGIN_COOLDOWN_SECONDS);
+      cache.put(cooldownKey, "1", ADMIN_LOGIN_COOLDOWN_SECONDS);
     }
     return { status: "error", message: "PIN/passphrase tidak sesuai." };
   }
 
-  cache.remove("admin_login_failures");
-  cache.remove("admin_login_cooldown");
+  cache.remove(failuresKey);
+  cache.remove(cooldownKey);
   var token = Utilities.getUuid().replace(/-/g, "") +
     Utilities.getUuid().replace(/-/g, "") +
     Utilities.getUuid().replace(/-/g, "");
