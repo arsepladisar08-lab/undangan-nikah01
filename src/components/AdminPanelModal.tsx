@@ -1299,19 +1299,22 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     Buka <a href="https://sheets.new" target="_blank" rel="noopener noreferrer" className="text-gold-700 underline font-semibold">sheets.new</a> untuk membuat Google Spreadsheet baru.
                   </li>
                   <li>
-                    Klik menu <strong>Ekstensi (Extensions)</strong> &gt; <strong>Apps Script</strong>.
+                    Klik menu <strong>Ekstensi (Extensions)</strong> &gt; <strong>Apps Script</strong>, lalu ganti seluruh isi <code>Code.gs</code> dengan kode terbaru dari tombol <strong>"Salin Kode Apps Script"</strong>.
                   </li>
                   <li>
-                    Hapus kode bawaan, lalu tempel kode dari tombol <strong>"Salin Kode Apps Script"</strong> di atas.
+                    Di editor Apps Script, jalankan fungsi <code>setupAdminPin()</code> sekali dan buat PIN/passphrase unik minimal 10 karakter.
                   </li>
                   <li>
-                    Klik <strong>Terapkan (Deploy)</strong> &gt; <strong>Penerapan baru (New deployment)</strong> &gt; pilih jenis <strong>Aplikasi web (Web app)</strong>.
+                    Pilih <strong>Deploy → New deployment → Web app</strong>. Atur <em>Jalankan sebagai</em>: <strong>Saya</strong> dan <em>Yang memiliki akses</em>: <strong>Siapa saja (Anyone)</strong>. Aksi admin tetap dilindungi token server.
                   </li>
                   <li>
-                    Atur <em>Jalankan sebagai</em>: <strong>Saya</strong> dan <em>Yang memiliki akses</em>: <strong>Siapa saja (Anyone)</strong>.
+                    Deploy, berikan izin Google, lalu salin URL Web App. Simpan URL tersebut di konfigurasi panel admin.
                   </li>
                   <li>
-                    Klik <strong>Terapkan</strong>, berikan izin Google, lalu salin <strong>URL Aplikasi Web</strong> dan tempel pada kolom di atas!
+                    Tambahkan environment variable <code>VITE_APPS_SCRIPT_URL</code> pada Vercel/Netlify dan deploy ulang frontend agar semua perangkat tamu memakai backend yang sama.
+                  </li>
+                  <li>
+                    Saat kode Apps Script diubah lagi, deploy sebagai <strong>New version</strong> melalui <strong>Manage deployments</strong>.
                   </li>
                 </ol>
               </div>
