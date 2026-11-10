@@ -168,7 +168,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         if (Array.isArray(parsed) && parsed.length > 0) {
           setGuests(parsed);
         } else {
-          initDefaultGuests(savedDomain);
+          initDefaultGuests();
         }
       } else {
         initDefaultGuests(savedDomain);
