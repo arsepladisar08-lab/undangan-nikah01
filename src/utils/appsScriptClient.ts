@@ -100,6 +100,9 @@ export async function logoutAdminFromAppsScript(webAppUrl?: string): Promise<voi
   const url = webAppUrl || getAppsScriptUrl();
   try {
     if (token && url) await postAction(url, { action: 'adminLogout', token });
+  } catch (error) {
+    // Local logout must still complete when the server session already expired.
+    console.warn('Admin logout could not reach the backend:', error);
   } finally {
     clearAdminToken();
   }
