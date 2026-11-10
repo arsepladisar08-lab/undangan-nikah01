@@ -1,8 +1,36 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { GununganSvg } from './GununganSvg';
 import { motion } from 'motion/react';
 
-export const Footer: React.FC = () => {
+interface FooterProps {
+  isAdmin?: boolean;
+  onOpenAdmin?: () => void;
+  onSecretAdminTrigger?: () => void;
+}
+
+export const Footer: React.FC<FooterProps> = ({
+  isAdmin,
+  onOpenAdmin,
+  onSecretAdminTrigger,
+}) => {
+  const clickCountRef = useRef(0);
+  const clickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSecretClick = () => {
+    clickCountRef.current += 1;
+    if (clickTimeoutRef.current) {
+      clearTimeout(clickTimeoutRef.current);
+    }
+    if (clickCountRef.current >= 3) {
+      clickCountRef.current = 0;
+      onSecretAdminTrigger?.();
+    } else {
+      clickTimeoutRef.current = setTimeout(() => {
+        clickCountRef.current = 0;
+      }, 700);
+    }
+  };
+
   return (
     <footer className="py-16 px-6 bg-batik-light border-t border-gold-300/60 text-center relative overflow-hidden">
       {/* Background Subtle Rotating Asthabrata Ring */}
@@ -13,7 +41,9 @@ export const Footer: React.FC = () => {
       <motion.div
         animate={{ y: [0, -6, 0] }}
         transition={{ repeat: Infinity, duration: 5, ease: 'easeInOut' }}
-        className="w-20 h-28 mx-auto mb-4 relative z-10"
+        onClick={handleSecretClick}
+        className="w-20 h-28 mx-auto mb-4 relative z-10 cursor-pointer select-none"
+        title="Gunungan Jawa"
       >
         <GununganSvg glow />
       </motion.div>
@@ -31,7 +61,25 @@ export const Footer: React.FC = () => {
         Keluarga Besar Bapak K.R.T. H. Hendrawan Adi Kusumo &amp; Keluarga Besar
         Bapak Drs. H. Bambang Suryo Baskoro
       </p>
-      <div className="mt-8 pt-6 border-t border-gold-200/50 text-[11px] text-stone-400 relative z-10">
+
+      {/* Admin / Host Portal Trigger (ONLY shown to authenticated Admin) */}
+      {isAdmin && onOpenAdmin && (
+        <div className="mt-8 relative z-10 animate-fadeIn">
+          <button
+            onClick={onOpenAdmin}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gold-600 hover:bg-gold-700 text-white text-xs font-cinzel font-bold shadow-md hover:shadow-lg transition-all hover:scale-105"
+          >
+            <span>⚙️</span>
+            <span>Panel Kelola Tamu &amp; Foto (Admin)</span>
+          </button>
+        </div>
+      )}
+
+      {/* Secret click target on copyright */}
+      <div
+        onClick={handleSecretClick}
+        className="mt-8 pt-6 border-t border-gold-200/50 text-[11px] text-stone-400 relative z-10 select-none cursor-default"
+      >
         © 2026 Bagaskara &amp; Sekar Wedding. All rights reserved.
       </div>
     </footer>

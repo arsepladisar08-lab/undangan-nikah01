@@ -3,7 +3,15 @@ import { Feather, Heart, CircleDot } from 'lucide-react';
 import { motion } from 'motion/react';
 import { AnimatedHeading } from './AnimatedText';
 
-export const StoryTimeline: React.FC = () => {
+interface StoryTimelineProps {
+  storyPhotos?: {
+    story1?: string;
+    story2?: string;
+    story3?: string;
+  };
+}
+
+export const StoryTimeline: React.FC<StoryTimelineProps> = ({ storyPhotos }) => {
   return (
     <section className="relative py-24 md:py-32 px-6 bg-ivory-warm overflow-hidden">
       <div className="max-w-5xl mx-auto relative z-10">
@@ -55,7 +63,7 @@ export const StoryTimeline: React.FC = () => {
                 className="rounded-2xl overflow-hidden border border-gold-400/40 h-48 shadow-md bg-white p-1.5"
               >
                 <img
-                  src="https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=700&q=80"
+                  src={storyPhotos?.story1 || "https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=700&q=80"}
                   alt="First Encounter at Sekaten"
                   className="w-full h-full object-cover rounded-xl"
                   loading="lazy"
@@ -94,7 +102,7 @@ export const StoryTimeline: React.FC = () => {
                 className="rounded-2xl overflow-hidden border border-gold-400/40 h-48 shadow-md bg-white p-1.5"
               >
                 <img
-                  src="https://images.unsplash.com/photo-1522673607200-164d1b6ce486?auto=format&fit=crop&w=700&q=80"
+                  src={storyPhotos?.story2 || "https://images.unsplash.com/photo-1522673607200-164d1b6ce486?auto=format&fit=crop&w=700&q=80"}
                   alt="Growing Together"
                   className="w-full h-full object-cover rounded-xl"
                   loading="lazy"
@@ -133,7 +141,7 @@ export const StoryTimeline: React.FC = () => {
                 className="rounded-2xl overflow-hidden border border-gold-400/40 h-48 shadow-md bg-white p-1.5"
               >
                 <img
-                  src="https://images.unsplash.com/photo-1515934751635-c81c6bc9a2d8?auto=format&fit=crop&w=700&q=80"
+                  src={storyPhotos?.story3 || "https://images.unsplash.com/photo-1515934751635-c81c6bc9a2d8?auto=format&fit=crop&w=700&q=80"}
                   alt="Engagement"
                   className="w-full h-full object-cover rounded-xl"
                   loading="lazy"

@@ -4,7 +4,12 @@ import { MapPin, Instagram } from 'lucide-react';
 import { motion } from 'motion/react';
 import { AnimatedHeading } from './AnimatedText';
 
-export const CoupleSection: React.FC = () => {
+interface CoupleSectionProps {
+  groomPhotoUrl?: string;
+  bridePhotoUrl?: string;
+}
+
+export const CoupleSection: React.FC<CoupleSectionProps> = ({ groomPhotoUrl, bridePhotoUrl }) => {
   return (
     <section id="couple-section" className="relative py-24 md:py-32 px-6 bg-batik-light overflow-hidden">
       {/* Background Watermark */}
@@ -52,7 +57,7 @@ export const CoupleSection: React.FC = () => {
             >
               <div className="w-44 h-56 mx-auto mb-6 rounded-t-full rounded-b-2xl p-2 border-2 border-gold-400/60 bg-ivory relative shadow-md">
                 <img
-                  src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=700&q=80"
+                  src={groomPhotoUrl || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=700&q=80"}
                   alt="Raden Mas Bagaskara"
                   className="w-full h-full object-cover rounded-t-full rounded-b-xl group-hover:scale-105 transition-transform duration-700"
                   loading="lazy"
@@ -62,11 +67,7 @@ export const CoupleSection: React.FC = () => {
                 </span>
               </div>
 
-              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-gold-100 text-gold-700 text-[11px] font-semibold mb-2">
-                <span>Muslim</span>
-              </div>
-
-              <h3 className="font-serif text-2xl sm:text-3xl font-bold text-keraton-900 mb-2">
+              <h3 className="font-serif text-2xl sm:text-3xl font-bold text-keraton-900 mb-2 mt-2">
                 Raden Mas Bagaskara Adi Nugraha, S.Ars., M.T.
               </h3>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold-600 mb-4">
@@ -130,7 +131,7 @@ export const CoupleSection: React.FC = () => {
             >
               <div className="w-44 h-56 mx-auto mb-6 rounded-t-full rounded-b-2xl p-2 border-2 border-gold-400/60 bg-ivory relative shadow-md">
                 <img
-                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=700&q=80"
+                  src={bridePhotoUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=700&q=80"}
                   alt="Roro Sekar Arum"
                   className="w-full h-full object-cover rounded-t-full rounded-b-xl group-hover:scale-105 transition-transform duration-700"
                   loading="lazy"
@@ -140,11 +141,7 @@ export const CoupleSection: React.FC = () => {
                 </span>
               </div>
 
-              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-gold-100 text-gold-700 text-[11px] font-semibold mb-2">
-                <span>Muslimah</span>
-              </div>
-
-              <h3 className="font-serif text-2xl sm:text-3xl font-bold text-keraton-900 mb-2">
+              <h3 className="font-serif text-2xl sm:text-3xl font-bold text-keraton-900 mb-2 mt-2">
                 Roro Sekar Arum Kusumawardhani, S.Psi.
               </h3>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold-600 mb-4">

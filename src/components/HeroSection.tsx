@@ -6,9 +6,10 @@ import { AnimatedHeading, RotatingWord } from './AnimatedText';
 
 interface HeroSectionProps {
   onScrollToExplore: () => void;
+  photoUrl?: string;
 }
 
-export const HeroSection: React.FC<HeroSectionProps> = ({ onScrollToExplore }) => {
+export const HeroSection: React.FC<HeroSectionProps> = ({ onScrollToExplore, photoUrl }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -105,18 +106,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onScrollToExplore }) =
 
       {/* Main Centerpiece Arch */}
       <div className="relative z-20 max-w-3xl mx-auto px-6 text-center flex flex-col items-center">
-        {/* Animated Badge */}
-        <motion.div
-          initial={{ opacity: 0, y: -16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7 }}
-          className="inline-flex items-center gap-2 px-5 py-1.5 rounded-full border border-gold-400/50 bg-white/80 text-gold-700 text-xs uppercase tracking-[0.22em] font-semibold mb-6 shadow-sm backdrop-blur-sm"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-gold-500 animate-pulse" />
-          <span>The Sacred Islamic Union</span>
-          <Sparkles className="w-3.5 h-3.5 text-gold-500 animate-pulse" />
-        </motion.div>
-
         {/* Royal Arch Frame with Spring Micro-interaction */}
         <motion.div
           initial={{ opacity: 0, scale: 0.94 }}
@@ -127,7 +116,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onScrollToExplore }) =
         >
           <div className="w-full h-full rounded-t-full overflow-hidden relative">
             <img
-              src="https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&w=900&q=80"
+              src={photoUrl || "https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&w=900&q=80"}
               alt="The Wedding of Bagaskara and Sekar"
               className="w-full h-full object-cover object-center scale-105 group-hover:scale-110 transition-transform duration-1000"
               loading="eager"

@@ -6,6 +6,7 @@ import { AnimatedHeading } from './AnimatedText';
 
 interface GallerySectionProps {
   onOpenLightbox: (src: string, caption: string) => void;
+  galleryPhotos?: Record<string, string>;
 }
 
 export const GALLERY_ITEMS: GalleryItem[] = [
@@ -59,7 +60,13 @@ export const GALLERY_ITEMS: GalleryItem[] = [
   },
 ];
 
-export const GallerySection: React.FC<GallerySectionProps> = ({ onOpenLightbox }) => {
+export const GallerySection: React.FC<GallerySectionProps> = ({ onOpenLightbox, galleryPhotos }) => {
+  const items = GALLERY_ITEMS.map((item) => {
+    const slotKey = `gallery${item.id}`;
+    const dynamicSrc = galleryPhotos?.[slotKey] || item.src;
+    return { ...item, src: dynamicSrc };
+  });
+
   return (
     <section id="gallery-section" className="relative py-24 md:py-32 px-6 bg-ivory-warm border-t border-gold-300/40 overflow-hidden">
       <div className="max-w-6xl mx-auto relative z-10">
@@ -82,7 +89,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ onOpenLightbox }
 
         {/* Responsive Grid with Staggered Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-7 lg:gap-8 items-stretch">
-          {GALLERY_ITEMS.map((item, idx) => (
+          {items.map((item, idx) => (
             <motion.article
               key={item.id}
               initial={{ opacity: 0, y: 30 }}

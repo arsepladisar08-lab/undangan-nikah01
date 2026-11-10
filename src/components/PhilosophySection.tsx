@@ -1,6 +1,5 @@
 import React from 'react';
 import { BookOpen, Diamond } from 'lucide-react';
-import { AnimatedLoopingMandala } from './AnimatedLoopingMandala';
 import { AnimatedHeading } from './AnimatedText';
 import { motion } from 'motion/react';
 
@@ -35,11 +34,6 @@ export const PhilosophySection: React.FC = () => {
           you may find tranquility in them; and He placed between you affection
           and mercy. Indeed in that are signs for a people who give thought.”
         </blockquote>
-
-        {/* Featured Sacred Looping Object: Cakra Asthabrata Mandala */}
-        <div className="my-10">
-          <AnimatedLoopingMandala size={260} interactive={true} />
-        </div>
 
         <div className="my-6 flex items-center justify-center gap-4 text-gold-500">
           <span className="h-px w-16 bg-gradient-to-r from-transparent to-gold-500" />
