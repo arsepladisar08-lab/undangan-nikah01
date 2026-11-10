@@ -519,7 +519,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   // Copy the canonical Apps Script source from this repository.
   const handleCopyCodeGs = async () => {
     try {
-      const response = await fetch('https://raw.githubusercontent.com/arsepladisar08-lab/undangan-nikah01/main/google-apps-script/Code.gs');
+      const response = await fetch('https://raw.githubusercontent.com/arsepladisar08-lab/undangan-nikah01/security-hardening/google-apps-script/Code.gs');
       if (!response.ok) throw new Error('Gagal mengambil Code.gs dari repository.');
       const codeGs = await response.text();
       await navigator.clipboard.writeText(codeGs);
@@ -1310,7 +1310,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     Klik menu <strong>Ekstensi (Extensions)</strong> &gt; <strong>Apps Script</strong>, lalu ganti seluruh isi <code>Code.gs</code> dengan kode terbaru dari tombol <strong>"Salin Kode Apps Script"</strong>.
                   </li>
                   <li>
-                    Di editor Apps Script, jalankan fungsi <code>setupAdminPin()</code> sekali dan buat PIN/passphrase unik minimal 10 karakter.
+                    Buka <strong>Project Settings → Script Properties</strong>, tambahkan properti sementara <code>ADMIN_SETUP_PIN</code> dengan passphrase unik minimal 10 karakter, lalu simpan.
+                  </li>
+                  <li>
+                    Kembali ke editor, jalankan <code>setupAdminPin()</code>. Fungsi akan menyimpan hash PIN di server dan menghapus properti sementara; tidak perlu dialog Spreadsheet.
                   </li>
                   <li>
                     Pilih <strong>Deploy → New deployment → Web app</strong>. Atur <em>Jalankan sebagai</em>: <strong>Saya</strong> dan <em>Yang memiliki akses</em>: <strong>Siapa saja (Anyone)</strong>. Aksi admin tetap dilindungi token server.
