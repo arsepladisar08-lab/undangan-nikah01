@@ -4,7 +4,7 @@ import { Send, CheckCircle2, MessageSquareHeart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AnimatedHeading } from './AnimatedText';
 import {
-  APPS_SCRIPT_URL_STORAGE_KEY,
+  getAppsScriptUrl,
   saveRsvpToAppsScript,
   fetchRsvpFromAppsScript,
 } from '../utils/appsScriptClient';
@@ -67,53 +67,48 @@ export const RsvpWishesSection: React.FC<RsvpWishesSectionProps> = ({ onShowToas
     }
   }, [wishes]);
 
-  // Sync with remote Google Sheet if connected
+  // Load shared public RSVP feed using the build-time backend URL.
   useEffect(() => {
-    try {
-      const savedUrl = localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY);
-      if (savedUrl && savedUrl.startsWith('http')) {
-        void fetchRsvpFromAppsScript(savedUrl).then((remoteWishes) => {
-          if (remoteWishes && remoteWishes.length > 0) {
-            setWishes(remoteWishes);
-            localStorage.setItem('bagaskara_sekar_wishes', JSON.stringify(remoteWishes));
-          }
-        }).catch(() => {});
-      }
-    } catch {
-      // ignore
-    }
+    const backendUrl = getAppsScriptUrl();
+    if (!backendUrl) return;
+    void fetchRsvpFromAppsScript(backendUrl).then((remoteWishes) => {
+      setWishes(remoteWishes);
+      localStorage.setItem('bagaskara_sekar_wishes', JSON.stringify(remoteWishes));
+    });
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !message.trim()) return;
+    if (!name.trim() || !message.trim() || isSubmitting) return;
+
+    const backendUrl = getAppsScriptUrl();
+    if (!backendUrl) {
+      onShowToast('RSVP belum dapat dikirim karena backend belum dikonfigurasi. Silakan coba kembali nanti.');
+      return;
+    }
 
     setIsSubmitting(true);
     const newWish: WishItem = {
-      id: 'w_' + Date.now(),
+      id: 'pending_' + Date.now(),
       name: name.trim(),
       attendance,
       guestCount,
       message: message.trim(),
-      timestamp: 'Just now',
+      timestamp: 'Baru saja',
     };
 
-    const updated = [newWish, ...wishes];
-    setWishes(updated);
-    setName('');
-    setMessage('');
-    setIsSubmitting(false);
-
-    onShowToast("Jazakumullahu Khairan! Your RSVP and Du'a have been sent.");
-
-    // Send to Google Sheet in background
     try {
-      const savedUrl = localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY);
-      if (savedUrl && savedUrl.startsWith('http')) {
-        void saveRsvpToAppsScript(savedUrl, newWish);
+      const saved = await saveRsvpToAppsScript(backendUrl, newWish);
+      if (!saved) {
+        onShowToast('RSVP belum berhasil tersimpan. Periksa koneksi internet lalu coba kembali.');
+        return;
       }
-    } catch {
-      // ignore
+      setWishes((current) => [newWish, ...current]);
+      setName('');
+      setMessage('');
+      onShowToast("Terima kasih! RSVP dan doa Anda berhasil dikirim.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
