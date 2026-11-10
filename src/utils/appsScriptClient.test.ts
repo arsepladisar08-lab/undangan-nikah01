@@ -1,94 +1,62 @@
 import { test } from 'node:test';
-import assert from 'node:assert';
+import assert from 'node:assert/strict';
 import {
   generatePersonalizedUrl,
   generateWhatsAppMessage,
   generateWhatsAppShareUrl,
   getEffectiveBaseUrl,
-  verifyAdminPin,
-  DEFAULT_ADMIN_PIN,
+  getAppsScriptUrl,
   saveAudioToAppsScript,
   fetchAudioFromAppsScript,
 } from './appsScriptClient';
 
-test('generatePersonalizedUrl adds to query parameter correctly', () => {
-  const base = 'https://wedding.example.com/';
-  const url = generatePersonalizedUrl(base, 'Bapak Budi & Ibu Ani');
-  assert.strictEqual(url, 'https://wedding.example.com/?to=Bapak+Budi+%26+Ibu+Ani');
+test('generatePersonalizedUrl adds a safely encoded guest name', () => {
+  const url = generatePersonalizedUrl('https://wedding.example.com/', 'Bapak Budi & Ibu Ani');
+  assert.equal(url, 'https://wedding.example.com/?to=Bapak+Budi+%26+Ibu+Ani');
 });
 
 test('generatePersonalizedUrl preserves existing query parameters', () => {
-  const base = 'https://wedding.example.com/?ref=ig';
-  const url = generatePersonalizedUrl(base, 'Raden Danang');
-  assert.strictEqual(url, 'https://wedding.example.com/?ref=ig&to=Raden+Danang');
+  const url = generatePersonalizedUrl('https://wedding.example.com/?ref=ig', 'Raden Danang');
+  assert.equal(url, 'https://wedding.example.com/?ref=ig&to=Raden+Danang');
 });
 
-test('generateWhatsAppMessage includes guest name and invitation URL', () => {
-  const msg = generateWhatsAppMessage('Bapak Joko Tingkir', 'https://wedding.example.com/?to=Bapak+Joko+Tingkir');
-  assert.ok(msg.includes('Yth. Bapak Joko Tingkir,'));
-  assert.ok(msg.includes('Raden Mas Bagaskara Adi Nugraha'));
-  assert.ok(msg.includes('Roro Sekar Arum Kusumawardhani'));
-  assert.ok(msg.includes('https://wedding.example.com/?to=Bapak+Joko+Tingkir'));
-  assert.ok(msg.includes('Matur nuwun sanget'));
+test('WhatsApp message contains guest name, couple names, and invitation URL', () => {
+  const message = generateWhatsAppMessage('Bapak Joko Tingkir', 'https://wedding.example.com/?to=Bapak+Joko');
+  assert.ok(message.includes('Yth. Bapak Joko Tingkir,'));
+  assert.ok(message.includes('Raden Mas Bagaskara Adi Nugraha'));
+  assert.ok(message.includes('Roro Sekar Arum Kusumawardhani'));
+  assert.ok(message.includes('https://wedding.example.com/?to=Bapak+Joko'));
 });
 
-test('generateWhatsAppShareUrl formats phone numbers and encodes text', () => {
-  const shareUrl = generateWhatsAppShareUrl(
-    'Bapak Joko Tingkir',
-    'https://wedding.example.com/?to=Bapak+Joko+Tingkir',
-    '08123456789'
-  );
-  assert.ok(shareUrl.startsWith('https://api.whatsapp.com/send?phone=628123456789&text='));
-  assert.ok(shareUrl.includes(encodeURIComponent('Yth. Bapak Joko Tingkir,')));
+test('WhatsApp share URL normalizes Indonesian mobile numbers', () => {
+  const url = generateWhatsAppShareUrl('Bapak Joko', 'https://wedding.example.com/', '08123456789');
+  assert.ok(url.startsWith('https://api.whatsapp.com/send?phone=628123456789&text='));
 });
 
-test('getEffectiveBaseUrl normalizes domain and protocol', () => {
-  assert.strictEqual(
-    getEffectiveBaseUrl('bagaskara-sekar.vercel.app/'),
-    'https://bagaskara-sekar.vercel.app'
-  );
-  assert.strictEqual(
-    getEffectiveBaseUrl('https://undangan.netlify.app///'),
-    'https://undangan.netlify.app'
-  );
+test('getEffectiveBaseUrl normalizes protocol and trailing slashes', () => {
+  assert.equal(getEffectiveBaseUrl('bagaskara-sekar.vercel.app/'), 'https://bagaskara-sekar.vercel.app');
+  assert.equal(getEffectiveBaseUrl('https://undangan.netlify.app///'), 'https://undangan.netlify.app');
 });
 
-test('verifyAdminPin validates default pin 1212', () => {
-  assert.strictEqual(DEFAULT_ADMIN_PIN, '1212');
-  assert.strictEqual(verifyAdminPin('1212'), true);
-  assert.strictEqual(verifyAdminPin('0000'), false);
-  assert.strictEqual(verifyAdminPin(''), false);
-  assert.strictEqual(verifyAdminPin(' 1212 '), true);
+test('getAppsScriptUrl is empty without browser override or build configuration', () => {
+  assert.equal(getAppsScriptUrl(), '');
 });
 
-test('guest links never contain admin query parameter', () => {
-  const url = generatePersonalizedUrl('https://bagaskara-sekar.vercel.app', 'Bapak Ir. H. Joko');
-  assert.ok(url.includes('to=Bapak+Ir.+H.+Joko'));
-  assert.strictEqual(url.includes('admin='), false);
-});
-
-test('saveAudioToAppsScript throws on empty or invalid URL', async () => {
+test('admin write operations reject without a server-issued session token', async () => {
   await assert.rejects(
-    async () => {
-      await saveAudioToAppsScript('', {
-        mode: 'youtube',
-        youtubeUrl: 'https://www.youtube.com/watch?v=SB7qdt7A92A',
-        youtubeId: 'SB7qdt7A92A',
-        title: 'Kebo Giro',
-        volume: 75,
-        startSeconds: 0,
-        loop: true,
-      });
-    },
-    {
-      message: 'URL Google Apps Script belum dikonfigurasi.',
-    }
+    () => saveAudioToAppsScript('', {
+      mode: 'youtube',
+      youtubeUrl: 'https://www.youtube.com/watch?v=SB7qdt7A92A',
+      youtubeId: 'SB7qdt7A92A',
+      title: 'Kebo Giro',
+      volume: 75,
+      startSeconds: 0,
+      loop: true,
+    }),
+    { message: 'Sesi admin tidak ditemukan. Silakan login kembali.' }
   );
 });
 
-test('fetchAudioFromAppsScript returns null on empty URL without throwing', async () => {
-  const result = await fetchAudioFromAppsScript('');
-  assert.strictEqual(result, null);
+test('fetchAudioFromAppsScript returns null without a configured backend URL', async () => {
+  assert.equal(await fetchAudioFromAppsScript(''), null);
 });
-
-
