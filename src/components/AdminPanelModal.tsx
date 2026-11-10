@@ -138,8 +138,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
   };
 
-  // Load saved state on mount
+  // Load owner-only settings and guest data only when the admin panel is opened.
   useEffect(() => {
+    if (!isOpen) return;
     try {
       const savedDomain = localStorage.getItem(PUBLIC_DOMAIN_STORAGE_KEY) || '';
       if (savedDomain) {
@@ -176,7 +177,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     } catch {
       initDefaultGuests();
     }
-  }, []);
+  }, [isOpen]);
 
   const initDefaultGuests = () => {
     // Never prefill fabricated names or phone numbers into a real event's guest list.
