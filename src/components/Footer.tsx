@@ -3,14 +3,10 @@ import { GununganSvg } from './GununganSvg';
 import { motion } from 'motion/react';
 
 interface FooterProps {
-  isAdmin?: boolean;
-  onOpenAdmin?: () => void;
   onSecretAdminTrigger?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
-  isAdmin,
-  onOpenAdmin,
   onSecretAdminTrigger,
 }) => {
   const clickCountRef = useRef(0);
@@ -62,18 +58,6 @@ export const Footer: React.FC<FooterProps> = ({
         Bapak Drs. H. Bambang Suryo Baskoro
       </p>
 
-      {/* Admin / Host Portal Trigger (ONLY shown to authenticated Admin) */}
-      {isAdmin && onOpenAdmin && (
-        <div className="mt-8 relative z-10 animate-fadeIn">
-          <button
-            onClick={onOpenAdmin}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gold-600 hover:bg-gold-700 text-white text-xs font-cinzel font-bold shadow-md hover:shadow-lg transition-all hover:scale-105"
-          >
-            <span>⚙️</span>
-            <span>Panel Kelola Tamu &amp; Foto (Admin)</span>
-          </button>
-        </div>
-      )}
 
       {/* Secret click target on copyright */}
       <div

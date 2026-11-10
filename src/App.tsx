@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings } from 'lucide-react';
 import { OpeningGate } from './components/OpeningGate';
 import { HeroSection } from './components/HeroSection';
 import { PhilosophySection } from './components/PhilosophySection';
@@ -16,9 +15,11 @@ import { FloatingAudioControl } from './components/FloatingAudioControl';
 import { Toast } from './components/Toast';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { AdminPasscodeModal } from './components/AdminPasscodeModal';
-import { GamelanAudioEngine } from './utils/audio';
+import { BackgroundAudioPlayer, BackgroundAudioPlayerRef } from './components/BackgroundAudioPlayer';
 import { VenueDetail } from './types/wedding';
 import { PhotoMap, PhotoSlotKey, DEFAULT_PHOTOS } from './types/photos';
+import { WeddingAudioConfig } from './types/audio';
+import { loadAudioConfig, saveAudioConfig } from './utils/audioConfig';
 import {
   CUSTOM_PHOTOS_STORAGE_KEY,
   APPS_SCRIPT_URL_STORAGE_KEY,
@@ -36,8 +37,31 @@ export default function App() {
   const [activeMapVenue, setActiveMapVenue] = useState<VenueDetail | null>(null);
   const [lightboxData, setLightboxData] = useState<{ src: string; caption: string } | null>(null);
 
-  // Admin Security and Auth State (Hidden from public by default)
-  const [isAdmin, setIsAdmin] = useState(() => isCurrentlyAdminAuthenticated());
+  // Admin Security and Auth State:
+  // Strictly hidden from public/guests by default.
+  // If the URL has ?to=... and no ?admin=..., isAdmin is guaranteed FALSE.
+  const [isAdmin, setIsAdmin] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      // Personalized Guest link: ALWAYS false
+      if (params.has('to') && !params.has('admin')) {
+        return false;
+      }
+      // Direct PIN unlock in query param: ?admin=1212
+      const adminParam = params.get('admin');
+      if (adminParam && verifyAdminPin(adminParam)) {
+        return true;
+      }
+      // Check ephemeral sessionStorage only when not viewing a guest invitation
+      if (!params.has('to')) {
+        return isCurrentlyAdminAuthenticated();
+      }
+    } catch {
+      // Fallback
+    }
+    return false;
+  });
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isPasscodeOpen, setIsPasscodeOpen] = useState(false);
 
@@ -53,13 +77,16 @@ export default function App() {
     return DEFAULT_PHOTOS;
   });
 
-  const audioRef = useRef<GamelanAudioEngine | null>(null);
+  const [audioConfig, setAudioConfig] = useState<WeddingAudioConfig>(() => loadAudioConfig());
+  const audioPlayerRef = useRef<BackgroundAudioPlayerRef | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     // Parse query params for guest name and testability autostart / admin
     const params = new URLSearchParams(window.location.search);
     const toParam = params.get('to');
+    const adminParam = params.get('admin');
+
     if (toParam) {
       setGuestName(toParam);
     }
@@ -69,11 +96,18 @@ export default function App() {
       setIsGateOpen(true);
     }
 
-    // Check for admin trigger in URL (e.g. ?admin=1212 or ?admin=1)
-    const adminParam = params.get('admin');
-    if (adminParam) {
+    // STRICT ADMIN VISIBILITY ENFORCEMENT:
+    // If this is a personalized guest link (?to=...) and does NOT have explicit ?admin=...,
+    // unconditionally lock into Public Guest Mode with ZERO admin UI visible.
+    if (toParam && !adminParam) {
+      setIsAdmin(false);
+      setIsAdminOpen(false);
+      setIsPasscodeOpen(false);
+      setAdminAuthenticated(false);
+    } else if (adminParam) {
+      // Admin trigger in URL (e.g. ?admin=1212 or ?admin=1)
       if (verifyAdminPin(adminParam)) {
-        setAdminAuthenticated(true, true);
+        setAdminAuthenticated(true);
         setIsAdmin(true);
         setIsAdminOpen(true);
       } else if (isCurrentlyAdminAuthenticated()) {
@@ -81,6 +115,7 @@ export default function App() {
         setIsAdminOpen(true);
       } else {
         // Show passcode modal for admin verification
+        setIsAdmin(false);
         setIsPasscodeOpen(true);
       }
     }
@@ -101,15 +136,7 @@ export default function App() {
       // ignore
     }
 
-    // Initialize Gamelan Audio Engine
-    audioRef.current = new GamelanAudioEngine((playing) => {
-      setIsPlayingMusic(playing);
-    });
-
     return () => {
-      if (audioRef.current) {
-        audioRef.current.destroy();
-      }
       if (toastTimeoutRef.current) {
         clearTimeout(toastTimeoutRef.current);
       }
@@ -118,16 +145,24 @@ export default function App() {
 
   const handleOpenInvitation = () => {
     setIsGateOpen(true);
-    // Start ambient gamelan music on user gesture
-    if (audioRef.current) {
-      void audioRef.current.start();
+    // Start ambient music (YouTube or Gamelan Slendro) on user gesture
+    if (audioPlayerRef.current) {
+      void audioPlayerRef.current.play();
     }
   };
 
   const handleToggleAudio = () => {
-    if (audioRef.current) {
-      audioRef.current.toggle();
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.toggle();
     }
+  };
+
+  const handleUpdateAudioConfig = (newConfig: WeddingAudioConfig) => {
+    setAudioConfig(newConfig);
+    saveAudioConfig(newConfig);
+    handleShowToast(
+      `Pengiring musik diperbarui: ${newConfig.mode === 'youtube' ? newConfig.title : 'Gamelan Slendro'}`
+    );
   };
 
   const handleShowToast = (msg: string) => {
@@ -186,21 +221,6 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen bg-[#fdfbf7] text-[#2c1e14] font-sans antialiased selection:bg-[#e2c37d] selection:text-[#1f1610]">
-      {/* Quick Host / Admin Trigger (Floating) - ONLY rendered when Admin is Authenticated */}
-      {isAdmin && (
-        <div className="fixed top-4 right-4 z-40 animate-fadeIn">
-          <button
-            onClick={() => setIsAdminOpen(true)}
-            aria-label="Buka Panel Kelola Undangan & Foto"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-keraton-950/90 hover:bg-keraton-900 text-gold-300 border border-gold-400/80 shadow-lg backdrop-blur-md transition-all hover:scale-105 cursor-pointer text-xs font-cinzel font-bold"
-            title="Kelola Undangan, Tamu & Foto (Google Drive)"
-          >
-            <Settings className="w-3.5 h-3.5 text-gold-400 animate-spin-slow" />
-            <span>Mode Admin</span>
-          </button>
-        </div>
-      )}
-
       {/* Opening Gate Overlay */}
       <OpeningGate
         isOpen={isGateOpen}
@@ -235,17 +255,25 @@ export default function App() {
         <RsvpWishesSection onShowToast={handleShowToast} />
         <GiftSection onCopyText={handleCopyText} />
         <Footer
-          isAdmin={isAdmin}
-          onOpenAdmin={() => setIsAdminOpen(true)}
           onSecretAdminTrigger={handleSecretAdminTrigger}
         />
       </main>
+
+      {/* Background Audio Player Engine (YouTube Audio & Slendro Gamelan Synthesizer) */}
+      <BackgroundAudioPlayer
+        ref={audioPlayerRef}
+        config={audioConfig}
+        onStateChange={setIsPlayingMusic}
+        onAudioError={(err) => handleShowToast(err)}
+      />
 
       {/* Floating Audio Ambience Toggle */}
       <FloatingAudioControl
         isPlaying={isPlayingMusic}
         onToggle={handleToggleAudio}
         visible={isGateOpen}
+        trackTitle={audioConfig.mode === 'youtube' ? audioConfig.title : 'Gamelan Slendro Ambience'}
+        mode={audioConfig.mode}
       />
 
       {/* Venue Map Modal */}
@@ -273,7 +301,7 @@ export default function App() {
         onShowToast={handleShowToast}
       />
 
-      {/* Admin, Guest List & Photo Manager Modal (Google Drive & Sheets) */}
+      {/* Admin, Guest List, Music & Photo Manager Modal (Google Drive & Sheets) */}
       <AdminPanelModal
         isOpen={isAdminOpen}
         onClose={() => setIsAdminOpen(false)}
@@ -290,6 +318,8 @@ export default function App() {
           setIsAdminOpen(false);
         }}
         onShowToast={handleShowToast}
+        audioConfig={audioConfig}
+        onUpdateAudioConfig={handleUpdateAudioConfig}
       />
 
       {/* Toast Notification */}

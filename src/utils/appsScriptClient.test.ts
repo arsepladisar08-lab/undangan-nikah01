@@ -55,4 +55,13 @@ test('verifyAdminPin validates default pin 1212', () => {
   assert.strictEqual(DEFAULT_ADMIN_PIN, '1212');
   assert.strictEqual(verifyAdminPin('1212'), true);
   assert.strictEqual(verifyAdminPin('0000'), false);
+  assert.strictEqual(verifyAdminPin(''), false);
+  assert.strictEqual(verifyAdminPin(' 1212 '), true);
 });
+
+test('guest links never contain admin query parameter', () => {
+  const url = generatePersonalizedUrl('https://bagaskara-sekar.vercel.app', 'Bapak Ir. H. Joko');
+  assert.ok(url.includes('to=Bapak+Ir.+H.+Joko'));
+  assert.strictEqual(url.includes('admin='), false);
+});
+

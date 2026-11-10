@@ -21,6 +21,7 @@ import {
   Key,
   LogOut,
   ShieldCheck,
+  Music,
 } from 'lucide-react';
 import {
   PhotoSlotKey,
@@ -29,6 +30,8 @@ import {
   DEFAULT_PHOTOS,
   GuestItem,
 } from '../types/photos';
+import { WeddingAudioConfig } from '../types/audio';
+import { MusicSettingsTab } from './MusicSettingsTab';
 import {
   APPS_SCRIPT_URL_STORAGE_KEY,
   CUSTOM_PHOTOS_STORAGE_KEY,
@@ -57,6 +60,8 @@ interface AdminPanelModalProps {
   onSelectGuestPreview?: (guestName: string) => void;
   onShowToast: (message: string) => void;
   onLogoutAdmin?: () => void;
+  audioConfig: WeddingAudioConfig;
+  onUpdateAudioConfig: (config: WeddingAudioConfig) => void;
 }
 
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
@@ -68,8 +73,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   onSelectGuestPreview,
   onShowToast,
   onLogoutAdmin,
+  audioConfig,
+  onUpdateAudioConfig,
 }) => {
-  const [activeTab, setActiveTab] = useState<'guests' | 'photos' | 'settings'>('guests');
+  const [activeTab, setActiveTab] = useState<'guests' | 'photos' | 'music' | 'settings'>('guests');
 
   // Public domain configuration (e.g. https://bagaskara-sekar.vercel.app or netlify.app)
   const [publicDomain, setPublicDomain] = useState('');
@@ -684,6 +691,20 @@ function createJsonResponse(obj) {
             <span>Kelola & Ganti Foto ({PHOTO_SLOT_CONFIGS.length} Slot)</span>
           </button>
           <button
+            onClick={() => setActiveTab('music')}
+            className={`py-3 px-4 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'music'
+                ? 'border-gold-600 text-gold-800 font-bold bg-gold-100/40 rounded-t-lg'
+                : 'border-transparent text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            <Music className="w-4 h-4 text-gold-600" />
+            <span>Pengiring Suara (YouTube)</span>
+            {audioConfig.mode === 'youtube' && (
+              <span className="w-2 h-2 rounded-full bg-red-500" title="Mode Musik YouTube Aktif" />
+            )}
+          </button>
+          <button
             onClick={() => setActiveTab('settings')}
             className={`py-3 px-4 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'settings'
@@ -1094,7 +1115,16 @@ function createJsonResponse(obj) {
             </div>
           )}
 
-          {/* TAB 3: GOOGLE APPS SCRIPT SETTINGS & CODE */}
+          {/* TAB 3: AUDIO / YOUTUBE MUSIC SETTINGS */}
+          {activeTab === 'music' && (
+            <MusicSettingsTab
+              currentConfig={audioConfig}
+              onSaveConfig={onUpdateAudioConfig}
+              onShowToast={onShowToast}
+            />
+          )}
+
+          {/* TAB 4: GOOGLE APPS SCRIPT SETTINGS & CODE */}
           {activeTab === 'settings' && (
             <div className="space-y-6 max-w-3xl mx-auto">
               {/* Web App URL Form */}

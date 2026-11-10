@@ -24,7 +24,7 @@ export const AdminPasscodeModal: React.FC<AdminPasscodeModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (verifyAdminPin(pin)) {
-      setAdminAuthenticated(true, true);
+      setAdminAuthenticated(true);
       setError(false);
       setPin('');
       onShowToast('Akses Admin berhasil dibuka! Selamat datang.');

@@ -16,34 +16,33 @@ export const ADMIN_SESSION_STORAGE_KEY = 'javanese_wedding_admin_authenticated';
 export const DEFAULT_ADMIN_PIN = '1212';
 
 /**
- * Check if admin is currently authenticated in the session
+ * Check if admin is currently authenticated in the session.
+ * STRICT SECURITY: Admin session is ONLY stored ephemerally in sessionStorage.
+ * Any stale localStorage keys are aggressively purged to prevent leaking admin mode
+ * to public visitors or guest links.
  */
 export function isCurrentlyAdminAuthenticated(): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    return (
-      sessionStorage.getItem(ADMIN_SESSION_STORAGE_KEY) === 'true' ||
-      localStorage.getItem(ADMIN_SESSION_STORAGE_KEY) === 'true'
-    );
+    // Purge any lingering localStorage session to guarantee guest visitors never see admin mode
+    localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+    return sessionStorage.getItem(ADMIN_SESSION_STORAGE_KEY) === 'true';
   } catch {
     return false;
   }
 }
 
 /**
- * Store admin authentication state
+ * Store admin authentication state ephemerally (sessionStorage only)
  */
-export function setAdminAuthenticated(authenticated: boolean, persist = false): void {
+export function setAdminAuthenticated(authenticated: boolean): void {
   if (typeof window === 'undefined') return;
   try {
+    localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
     if (authenticated) {
       sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, 'true');
-      if (persist) {
-        localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, 'true');
-      }
     } else {
       sessionStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
-      localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
     }
   } catch {
     // Ignore storage errors
@@ -54,12 +53,14 @@ export function setAdminAuthenticated(authenticated: boolean, persist = false): 
  * Verify given PIN against saved or default PIN
  */
 export function verifyAdminPin(enteredPin: string): boolean {
-  if (typeof window === 'undefined') return enteredPin === DEFAULT_ADMIN_PIN;
+  const cleanEntered = enteredPin ? enteredPin.trim() : '';
+  if (!cleanEntered) return false;
+  if (typeof window === 'undefined') return cleanEntered === DEFAULT_ADMIN_PIN;
   try {
     const savedPin = localStorage.getItem(ADMIN_PIN_STORAGE_KEY) || DEFAULT_ADMIN_PIN;
-    return enteredPin.trim() === savedPin.trim();
+    return cleanEntered === savedPin.trim();
   } catch {
-    return enteredPin.trim() === DEFAULT_ADMIN_PIN;
+    return cleanEntered === DEFAULT_ADMIN_PIN;
   }
 }
 
