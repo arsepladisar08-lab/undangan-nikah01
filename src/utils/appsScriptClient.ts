@@ -7,6 +7,7 @@ export const CUSTOM_PHOTOS_STORAGE_KEY = 'javanese_wedding_custom_photos';
 export const GUESTS_STORAGE_KEY = 'javanese_wedding_guests';
 export const PUBLIC_DOMAIN_STORAGE_KEY = 'javanese_wedding_public_domain';
 export const ADMIN_TOKEN_STORAGE_KEY = 'javanese_wedding_admin_token';
+export const ADMIN_CLIENT_ID_STORAGE_KEY = 'javanese_wedding_admin_client_id';
 export const RSVP_STORAGE_KEY = 'bagaskara_sekar_wishes';
 
 type AppsScriptResult<T> = {
@@ -88,8 +89,25 @@ export function isCurrentlyAdminAuthenticated(): boolean {
   return Boolean(getAdminToken());
 }
 
+function getAdminClientId(): string {
+  if (typeof window === 'undefined') return 'server-client';
+  try {
+    let clientId = localStorage.getItem(ADMIN_CLIENT_ID_STORAGE_KEY);
+    if (!clientId) {
+      const bytes = new Uint8Array(16);
+      if (window.crypto?.getRandomValues) window.crypto.getRandomValues(bytes);
+      else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+      clientId = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem(ADMIN_CLIENT_ID_STORAGE_KEY, clientId);
+    }
+    return clientId;
+  } catch {
+    return 'ephemeral-' + Math.random().toString(36).slice(2);
+  }
+}
+
 export async function loginAdminToAppsScript(webAppUrl: string, pin: string): Promise<{ token: string; expiresIn: number }> {
-  const result = await postAction<never>(webAppUrl, { action: 'adminLogin', pin });
+  const result = await postAction<never>(webAppUrl, { action: 'adminLogin', pin, clientId: getAdminClientId() });
   if (!result.token) throw new Error('Server tidak mengembalikan sesi admin.');
   setAdminToken(result.token);
   return { token: result.token, expiresIn: result.expiresIn || 21600 };
