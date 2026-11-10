@@ -39,8 +39,7 @@ import {
   CUSTOM_PHOTOS_STORAGE_KEY,
   GUESTS_STORAGE_KEY,
   PUBLIC_DOMAIN_STORAGE_KEY,
-  ADMIN_PIN_STORAGE_KEY,
-  DEFAULT_ADMIN_PIN,
+  getAppsScriptUrl,
   getEffectiveBaseUrl,
   generatePersonalizedUrl,
   generateWhatsAppShareUrl,
@@ -49,8 +48,9 @@ import {
   saveGuestsToAppsScript,
   fetchGuestsFromAppsScript,
   pingAppsScript,
-  saveAdminPin,
-  setAdminAuthenticated,
+  changeAdminPinOnAppsScript,
+  deleteGuestFromAppsScript,
+
 } from '../utils/appsScriptClient';
 
 interface AdminPanelModalProps {
@@ -84,8 +84,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [publicDomain, setPublicDomain] = useState('');
   const [inputPublicDomain, setInputPublicDomain] = useState('');
 
-  // Admin PIN state
-  const [adminPin, setAdminPin] = useState(DEFAULT_ADMIN_PIN);
+  // PIN is never stored or displayed in the browser.
   const [newPinInput, setNewPinInput] = useState('');
 
   // Apps Script configuration
@@ -147,10 +146,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         setInputPublicDomain(savedDomain);
       }
 
-      const savedPin = localStorage.getItem(ADMIN_PIN_STORAGE_KEY) || DEFAULT_ADMIN_PIN;
-      setAdminPin(savedPin);
-
-      const savedUrl = localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY);
+      const savedUrl = localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY) || getAppsScriptUrl();
       if (savedUrl) {
         setAppsScriptUrl(savedUrl);
         // Automatically fetch guests from Google Spreadsheet if available
@@ -245,26 +241,30 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
   };
 
-  // Change Admin PIN
-  const handleUpdatePin = (e: React.FormEvent) => {
+  // Change Admin PIN on the server; current session is revoked after rotation.
+  const handleUpdatePin = async (e: React.FormEvent) => {
     e.preventDefault();
     const pin = newPinInput.trim();
-    if (!pin || pin.length < 4) {
-      onShowToast('PIN minimal 4 karakter/angka.');
+    if (pin.length < 10 || pin.length > 128) {
+      onShowToast('PIN/passphrase baru harus terdiri dari 10–128 karakter.');
       return;
     }
-    saveAdminPin(pin);
-    setAdminPin(pin);
-    setNewPinInput('');
-    onShowToast(`PIN Admin berhasil diperbarui menjadi "${pin}"!`);
+    try {
+      await changeAdminPinOnAppsScript(appsScriptUrl.trim(), pin);
+      setNewPinInput('');
+      onShowToast('PIN berhasil diperbarui di server. Silakan login kembali.');
+      onLogoutAdmin?.();
+      onClose();
+    } catch (err: unknown) {
+      onShowToast(err instanceof Error ? err.message : 'Gagal memperbarui PIN admin.');
+    }
   };
 
   // Lock and Logout from Admin Mode
   const handleLogout = () => {
-    setAdminAuthenticated(false);
     onLogoutAdmin?.();
     onClose();
-    onShowToast('Mode Admin dikunci. Tampilan kini bersih untuk tamu umum.');
+    onShowToast('Sesi admin dikunci.');
   };
 
   // Test connection to Apps Script
@@ -357,13 +357,20 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     void triggerAutoSaveGuests(updated, `${lines.length} tamu otomatis tersimpan ke Spreadsheet!`);
   };
 
-  // Delete guest
+  // Delete guest by ID remotely; never replace the entire remote sheet on deletion.
   const handleDeleteGuest = (id: string, name: string) => {
     const updated = guests.filter((g) => g.id !== id);
     setGuests(updated);
     localStorage.setItem(GUESTS_STORAGE_KEY, JSON.stringify(updated));
-    onShowToast(`Tamu "${name}" telah dihapus.`);
-    void triggerAutoSaveGuests(updated, `Daftar tamu di Spreadsheet otomatis diperbarui.`);
+    if (appsScriptUrl.trim()) {
+      void deleteGuestFromAppsScript(appsScriptUrl.trim(), id).then(() => {
+        onShowToast(`Tamu "${name}" dihapus dari perangkat dan server.`);
+      }).catch((err: unknown) => {
+        onShowToast(err instanceof Error ? `Gagal menghapus dari server: ${err.message}` : 'Gagal menghapus tamu dari server.');
+      });
+    } else {
+      onShowToast(`Tamu "${name}" dihapus dari perangkat ini. Backend belum dikonfigurasi.`);
+    }
   };
 
   // Copy text helper
@@ -443,9 +450,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check size (max 8MB)
-    if (file.size > 8 * 1024 * 1024) {
-      onShowToast('Ukuran foto maksimal 8 MB.');
+    // Match backend allowlist and server-side size limit.
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      onShowToast('Format foto harus JPG, PNG, atau WebP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      onShowToast('Ukuran foto maksimal 5 MB.');
       return;
     }
 
@@ -524,225 +535,20 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
   };
 
-  // Copy Code.gs source
+  // Copy the canonical Apps Script source from this repository.
   const handleCopyCodeGs = async () => {
-    const codeGs = `/**
- * =========================================================================
- * GOOGLE APPS SCRIPT - BACKEND UNDANGAN PERNIKAHAN JAWA
- * Raden Mas Bagaskara & Roro Sekar Arum
- * =========================================================================
- */
-var FOLDER_NAME = "Undangan Pernikahan Bagaskara & Sekar";
-
-function doGet(e) {
-  try {
-    var params = e ? e.parameter : {};
-    var action = params ? params.action : "getPhotos";
-    if (action === "ping") {
-      return createJsonResponse({ status: "success", message: "Google Apps Script Backend Aktif!" });
+    try {
+      const response = await fetch('https://raw.githubusercontent.com/arsepladisar08-lab/undangan-nikah01/main/google-apps-script/Code.gs');
+      if (!response.ok) throw new Error('Gagal mengambil Code.gs dari repository.');
+      const codeGs = await response.text();
+      await navigator.clipboard.writeText(codeGs);
+      setHasCopiedCode(true);
+      window.setTimeout(() => setHasCopiedCode(false), 2500);
+      onShowToast('Kode Apps Script terbaru berhasil disalin.');
+    } catch (err: unknown) {
+      onShowToast(err instanceof Error ? err.message : 'Gagal menyalin Code.gs. Buka file di GitHub dan salin secara manual.');
     }
-    if (action === "getAudio") {
-      return createJsonResponse({ status: "success", data: getAudioFromSheet() });
-    }
-    if (action === "getGuests") {
-      return createJsonResponse({ status: "success", data: getGuestsFromSheet() });
-    }
-    if (action === "getRsvp") {
-      return createJsonResponse({ status: "success", data: getRsvpFromSheet() });
-    }
-    return createJsonResponse({ status: "success", data: getPhotosFromSheet() });
-  } catch (err) {
-    return createJsonResponse({ status: "error", message: err.toString() });
-  }
-}
-
-function doPost(e) {
-  try {
-    var data = (e.postData && e.postData.contents) ? JSON.parse(e.postData.contents) : e.parameter;
-    if (data.action === "saveAudio") {
-      return createJsonResponse({ status: "success", data: handleSaveAudio(data.config) });
-    }
-    if (data.action === "saveGuests") {
-      return createJsonResponse({ status: "success", count: handleSaveGuests(data.guests) });
-    }
-    if (data.action === "saveRsvp") {
-      return createJsonResponse({ status: "success", data: handleSaveRsvp(data.rsvp) });
-    }
-    if (data.action === "uploadPhoto") {
-      return createJsonResponse({ status: "success", data: handlePhotoUpload(data) });
-    }
-    return createJsonResponse({ status: "error", message: "Action unknown: " + data.action });
-  } catch (err) {
-    return createJsonResponse({ status: "error", message: err.toString() });
-  }
-}
-
-function handleSaveAudio(config) {
-  if (!config) return null;
-  var sheet = getOrCreateSheet("Audio", ["Mode", "YouTube ID", "YouTube URL", "Judul Musik", "Volume", "Loop", "Mulai (Detik)", "Terakhir Diperbarui"]);
-  var now = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd HH:mm:ss");
-  sheet.getRange(2, 1, 1, 8).setValues([[
-    config.mode || "youtube",
-    config.youtubeId || "",
-    config.youtubeUrl || "",
-    config.title || "",
-    config.volume != null ? config.volume : 75,
-    config.loop != null ? config.loop : true,
-    config.startSeconds || 0,
-    now
-  ]]);
-  return config;
-}
-
-function getAudioFromSheet() {
-  var sheet = getOrCreateSheet("Audio", ["Mode", "YouTube ID", "YouTube URL", "Judul Musik", "Volume", "Loop", "Mulai (Detik)", "Terakhir Diperbarui"]);
-  var last = sheet.getLastRow();
-  if (last < 2) return null;
-  var row = sheet.getRange(2, 1, 1, 8).getValues()[0];
-  if (!row[0] && !row[1]) return null;
-  return {
-    mode: row[0] || "youtube",
-    youtubeId: row[1] || "",
-    youtubeUrl: row[2] || "",
-    title: row[3] || "",
-    volume: Number(row[4]) || 75,
-    loop: row[5] === true || row[5] === "TRUE" || row[5] === 1,
-    startSeconds: Number(row[6]) || 0,
-    updatedAt: row[7] || ""
   };
-}
-
-function handlePhotoUpload(data) {
-  var decodedBytes = Utilities.base64Decode(data.base64Data.split(",").pop());
-  var blob = Utilities.newBlob(decodedBytes, data.mimeType || "image/jpeg", data.fileName || "photo.jpg");
-  var folder = getOrCreateFolder(FOLDER_NAME);
-  var file = folder.createFile(blob);
-  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
-  var fileId = file.getId();
-  var directUrl = "https://lh3.googleusercontent.com/d/" + fileId;
-  recordPhotoInSheet(data.slotKey, data.slotLabel || data.slotKey, directUrl, fileId);
-  return { slotKey: data.slotKey, fileId: fileId, url: directUrl, driveViewUrl: file.getUrl() };
-}
-
-function recordPhotoInSheet(slotKey, slotLabel, url, fileId) {
-  var sheet = getOrCreateSheet("Photos", ["Slot Key", "Label Slot", "Image URL (Direct)", "Drive File ID", "Tanggal Upload"]);
-  var data = sheet.getDataRange().getValues();
-  var found = -1;
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === slotKey) { found = i + 1; break; }
-  }
-  var now = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd HH:mm:ss");
-  if (found > 0) {
-    sheet.getRange(found, 2, 1, 4).setValues([[slotLabel, url, fileId, now]]);
-  } else {
-    sheet.appendRow([slotKey, slotLabel, url, fileId, now]);
-  }
-}
-
-function getPhotosFromSheet() {
-  var sheet = getOrCreateSheet("Photos", ["Slot Key", "Label Slot", "Image URL (Direct)", "Drive File ID", "Tanggal Upload"]);
-  var data = sheet.getDataRange().getValues();
-  var res = {};
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][0] && data[i][2]) res[data[i][0]] = data[i][2];
-  }
-  return res;
-}
-
-function handleSaveGuests(guests) {
-  if (!guests || !Array.isArray(guests)) return 0;
-  var sheet = getOrCreateSheet("Guests", ["ID", "Nama Tamu", "No WhatsApp", "Tautan Undangan Khusus", "Catatan", "Terakhir Diperbarui"]);
-  var last = sheet.getLastRow();
-  if (last > 1) sheet.getRange(2, 1, last - 1, 6).clearContent();
-  var now = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd HH:mm:ss");
-  var rows = guests.map(function(g, idx) {
-    return [g.id || ("g_" + (idx+1)), g.name || "", g.phone || "", g.customUrl || "", g.notes || "", now];
-  });
-  if (rows.length > 0) sheet.getRange(2, 1, rows.length, 6).setValues(rows);
-  return rows.length;
-}
-
-function getGuestsFromSheet() {
-  var sheet = getOrCreateSheet("Guests", ["ID", "Nama Tamu", "No WhatsApp", "Tautan Undangan Khusus", "Catatan", "Terakhir Diperbarui"]);
-  var data = sheet.getDataRange().getValues();
-  var guests = [];
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][1]) {
-      guests.push({ id: data[i][0], name: data[i][1], phone: data[i][2], customUrl: data[i][3], notes: data[i][4] });
-    }
-  }
-  return guests;
-}
-
-function handleSaveRsvp(rsvp) {
-  if (!rsvp) return null;
-  var sheet = getOrCreateSheet("RSVP", ["ID", "Nama Tamu", "Kehadiran", "Jumlah Tamu (Pax)", "Doa & Ucapan", "Waktu Respon"]);
-  var now = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd HH:mm:ss");
-  var row = [
-    rsvp.id || ("rsvp_" + new Date().getTime()),
-    rsvp.name || "",
-    rsvp.attendance || "attending",
-    rsvp.guestCount || "1 Person",
-    rsvp.message || "",
-    rsvp.timestamp || now
-  ];
-  sheet.appendRow(row);
-  return rsvp;
-}
-
-function getRsvpFromSheet() {
-  var sheet = getOrCreateSheet("RSVP", ["ID", "Nama Tamu", "Kehadiran", "Jumlah Tamu (Pax)", "Doa & Ucapan", "Waktu Respon"]);
-  var data = sheet.getDataRange().getValues();
-  var rsvps = [];
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][1]) {
-      rsvps.push({
-        id: data[i][0] || ("rsvp_" + i),
-        name: data[i][1],
-        attendance: data[i][2] || "attending",
-        guestCount: data[i][3] || "1 Person",
-        message: data[i][4] || "",
-        timestamp: data[i][5] || ""
-      });
-    }
-  }
-  return rsvps;
-}
-
-function getOrCreateSheet(name, headers) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(name);
-  if (!sheet) {
-    sheet = ss.insertSheet(name);
-    if (headers) {
-      sheet.appendRow(headers);
-      sheet.getRange(1, 1, 1, headers.length).setBackground("#2c1e14").setFontColor("#f6ebcc").setFontWeight("bold");
-      sheet.setFrozenRows(1);
-    }
-  }
-  return sheet;
-}
-
-function getOrCreateFolder(name) {
-  var folders = DriveApp.getFoldersByName(name);
-  return folders.hasNext() ? folders.next() : DriveApp.createFolder(name);
-}
-
-function createJsonResponse(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
-}`;
-
-    await handleCopy(codeGs, 'code_gs', 'Kode Apps Script (Code.gs)');
-    setHasCopiedCode(true);
-    setTimeout(() => setHasCopiedCode(false), 3000);
-  };
-
-  if (!isOpen) return null;
-
-  const categories = ['All', 'Hero', 'Mempelai', 'Cerita Cinta', 'Galeri'];
-  const filteredConfigs = PHOTO_SLOT_CONFIGS.filter(
-    (cfg) => selectedCategory === 'All' || cfg.section === selectedCategory
-  );
 
   return (
     <div
@@ -1417,25 +1223,22 @@ function createJsonResponse(obj) {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-                  <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200">
-                    <span className="text-[11px] font-semibold text-stone-500 block uppercase font-cinzel">
-                      PIN Admin Saat Ini:
+                  <div className="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-200">
+                    <span className="text-[11px] font-semibold text-emerald-800 block uppercase font-cinzel">
+                      Status kredensial
                     </span>
-                    <span className="font-mono text-base font-bold text-stone-900 tracking-wider">
-                      {adminPin}
-                    </span>
-                    <span className="text-[11px] text-stone-400 block mt-0.5">
-                      (Bawaan: {DEFAULT_ADMIN_PIN} — sesuai tanggal 12.12.2026)
+                    <span className="text-xs text-emerald-900 block mt-1">
+                      PIN disimpan sebagai hash di Google Apps Script. Tidak ada PIN bawaan atau PIN yang disimpan di browser.
                     </span>
                   </div>
-
                   <form onSubmit={handleUpdatePin} className="flex gap-2">
                     <input
-                      type="text"
+                      type="password"
                       value={newPinInput}
                       onChange={(e) => setNewPinInput(e.target.value)}
-                      placeholder="PIN baru (min. 4 digit)"
-                      maxLength={12}
+                      placeholder="PIN/passphrase baru (min. 10 karakter)"
+                      maxLength={128}
+                      autoComplete="new-password"
                       className="flex-1 px-3 py-2 text-xs font-mono rounded-xl border border-stone-300 focus:outline-none focus:border-gold-500"
                     />
                     <button
@@ -1454,7 +1257,10 @@ function createJsonResponse(obj) {
                   </p>
                   <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-stone-700">
                     <li>
-                      <strong>Cara 1 (URL):</strong> Tambahkan <code>?admin=1</code> di akhir tautan website Anda.
+                      Tambahkan <code>?admin=1</code> di akhir tautan website untuk membuka layar login. PIN tetap diverifikasi oleh backend.
+                    </li>
+                    <li>
+                      Siapkan kredensial pertama melalui fungsi <code>setupAdminPin()</code> di editor Google Apps Script.
                     </li>
                     <li>
                       <strong>Cara 2 (Gerakan Rahasia):</strong> Klik <strong>3 kali</strong> pada tulisan hak cipta (copyright) atau logo Gunungan di paling bawah halaman footer.
