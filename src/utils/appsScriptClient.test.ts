@@ -7,6 +7,8 @@ import {
   getEffectiveBaseUrl,
   verifyAdminPin,
   DEFAULT_ADMIN_PIN,
+  saveAudioToAppsScript,
+  fetchAudioFromAppsScript,
 } from './appsScriptClient';
 
 test('generatePersonalizedUrl adds to query parameter correctly', () => {
@@ -64,4 +66,29 @@ test('guest links never contain admin query parameter', () => {
   assert.ok(url.includes('to=Bapak+Ir.+H.+Joko'));
   assert.strictEqual(url.includes('admin='), false);
 });
+
+test('saveAudioToAppsScript throws on empty or invalid URL', async () => {
+  await assert.rejects(
+    async () => {
+      await saveAudioToAppsScript('', {
+        mode: 'youtube',
+        youtubeUrl: 'https://www.youtube.com/watch?v=SB7qdt7A92A',
+        youtubeId: 'SB7qdt7A92A',
+        title: 'Kebo Giro',
+        volume: 75,
+        startSeconds: 0,
+        loop: true,
+      });
+    },
+    {
+      message: 'URL Google Apps Script belum dikonfigurasi.',
+    }
+  );
+});
+
+test('fetchAudioFromAppsScript returns null on empty URL without throwing', async () => {
+  const result = await fetchAudioFromAppsScript('');
+  assert.strictEqual(result, null);
+});
+
 

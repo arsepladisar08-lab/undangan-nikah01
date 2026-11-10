@@ -1,4 +1,6 @@
 import { PhotoSlotKey, GuestItem } from '../types/photos';
+import { WeddingAudioConfig, AudioSourceMode } from '../types/audio';
+import { WishItem } from '../types/wedding';
 
 /**
  * Storage keys for local persistence
@@ -9,6 +11,7 @@ export const GUESTS_STORAGE_KEY = 'javanese_wedding_guests';
 export const PUBLIC_DOMAIN_STORAGE_KEY = 'javanese_wedding_public_domain';
 export const ADMIN_PIN_STORAGE_KEY = 'javanese_wedding_admin_pin';
 export const ADMIN_SESSION_STORAGE_KEY = 'javanese_wedding_admin_authenticated';
+export const RSVP_STORAGE_KEY = 'bagaskara_sekar_wishes';
 
 /**
  * Default PIN for Host / Admin access (1212 - matching wedding date 12.12.2026)
@@ -335,3 +338,150 @@ export async function pingAppsScript(webAppUrl: string): Promise<boolean> {
   const result = await response.json();
   return result.status === 'success';
 }
+
+/**
+ * Automatically save YouTube / audio configuration to Google Apps Script / Google Spreadsheet
+ */
+export async function saveAudioToAppsScript(
+  webAppUrl: string,
+  config: WeddingAudioConfig
+): Promise<boolean> {
+  if (!webAppUrl || !webAppUrl.startsWith('http')) {
+    throw new Error('URL Google Apps Script belum dikonfigurasi.');
+  }
+
+  const payload = {
+    action: 'saveAudio',
+    config: {
+      mode: config.mode,
+      youtubeId: config.youtubeId || '',
+      youtubeUrl: config.youtubeUrl || '',
+      title: config.title || '',
+      volume: config.volume ?? 75,
+      startSeconds: config.startSeconds ?? 0,
+      loop: config.loop ?? true,
+    },
+  };
+
+  const response = await fetch(webAppUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gagal menyimpan pengaturan audio ke Apps Script: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  if (result.status !== 'success') {
+    throw new Error(result.message || 'Gagal menyimpan pengaturan audio ke Google Spreadsheet.');
+  }
+
+  return true;
+}
+
+/**
+ * Automatically fetch saved YouTube / audio configuration from Google Apps Script / Google Spreadsheet
+ */
+export async function fetchAudioFromAppsScript(
+  webAppUrl: string
+): Promise<WeddingAudioConfig | null> {
+  if (!webAppUrl || !webAppUrl.startsWith('http')) {
+    return null;
+  }
+
+  try {
+    const url = `${webAppUrl}${webAppUrl.includes('?') ? '&' : '?'}action=getAudio&_t=${Date.now()}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      return null;
+    }
+
+    const result = await response.json();
+    if (result.status === 'success' && result.data && typeof result.data === 'object') {
+      const d = result.data;
+      if (d.youtubeId || d.mode) {
+        return {
+          mode: (d.mode === 'youtube' ? 'youtube' : 'gamelan') as AudioSourceMode,
+          youtubeId: String(d.youtubeId || ''),
+          youtubeUrl: String(d.youtubeUrl || (d.youtubeId ? `https://www.youtube.com/watch?v=${d.youtubeId}` : '')),
+          title: String(d.title || (d.mode === 'youtube' ? 'Musik YouTube Pernikahan' : 'Gamelan Slendro Ambience')),
+          volume: typeof d.volume === 'number' ? d.volume : 75,
+          startSeconds: typeof d.startSeconds === 'number' ? d.startSeconds : 0,
+          loop: d.loop !== false,
+        };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch all RSVP responses from Google Apps Script / Google Spreadsheet
+ */
+export async function fetchRsvpFromAppsScript(
+  webAppUrl: string
+): Promise<WishItem[]> {
+  if (!webAppUrl || !webAppUrl.startsWith('http')) {
+    return [];
+  }
+
+  try {
+    const url = `${webAppUrl}${webAppUrl.includes('?') ? '&' : '?'}action=getRsvp&_t=${Date.now()}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      return [];
+    }
+
+    const result = await response.json();
+    if (result.status === 'success' && Array.isArray(result.data)) {
+      return result.data as WishItem[];
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Save / append a new RSVP response to Google Apps Script / Google Spreadsheet
+ */
+export async function saveRsvpToAppsScript(
+  webAppUrl: string,
+  rsvp: WishItem
+): Promise<boolean> {
+  if (!webAppUrl || !webAppUrl.startsWith('http')) {
+    return false;
+  }
+
+  try {
+    const payload = {
+      action: 'saveRsvp',
+      rsvp,
+    };
+
+    const response = await fetch(webAppUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const result = await response.json();
+    return result.status === 'success';
+  } catch {
+    return false;
+  }
+}
+
+

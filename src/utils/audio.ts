@@ -6,21 +6,61 @@ export const SLENDRO_SCALE = [261.63, 293.66, 349.23, 392.00, 440.00, 523.25, 58
 
 export class GamelanAudioEngine {
   private audioCtx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private isPlaying = false;
+  private isMuted = false;
+  private volume = 0.75;
   private onStateChange?: (playing: boolean) => void;
+  private onMuteChange?: (muted: boolean) => void;
 
-  constructor(onStateChange?: (playing: boolean) => void) {
+  constructor(
+    onStateChange?: (playing: boolean) => void,
+    onMuteChange?: (muted: boolean) => void
+  ) {
     this.onStateChange = onStateChange;
+    this.onMuteChange = onMuteChange;
   }
 
   private initContext() {
     if (!this.audioCtx) {
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (AudioContextClass) {
         this.audioCtx = new AudioContextClass();
+        this.masterGain = this.audioCtx.createGain();
+        this.masterGain.gain.setValueAtTime(
+          this.isMuted ? 0 : this.volume,
+          this.audioCtx.currentTime
+        );
+        this.masterGain.connect(this.audioCtx.destination);
       }
     }
+  }
+
+  public setMuted(muted: boolean) {
+    this.isMuted = muted;
+    if (this.audioCtx && this.masterGain) {
+      const targetGain = muted ? 0 : this.volume;
+      this.masterGain.gain.cancelScheduledValues(this.audioCtx.currentTime);
+      this.masterGain.gain.setValueAtTime(targetGain, this.audioCtx.currentTime);
+    }
+    this.onMuteChange?.(muted);
+  }
+
+  public setVolume(vol: number) {
+    // vol is expected 0 to 100 or 0 to 1
+    const normalized = vol > 1 ? vol / 100 : vol;
+    this.volume = Math.max(0, Math.min(1, normalized));
+    if (!this.isMuted && this.audioCtx && this.masterGain) {
+      this.masterGain.gain.cancelScheduledValues(this.audioCtx.currentTime);
+      this.masterGain.gain.setValueAtTime(this.volume, this.audioCtx.currentTime);
+    }
+  }
+
+  public getIsMuted(): boolean {
+    return this.isMuted;
   }
 
   public playChime() {
@@ -41,7 +81,11 @@ export class GamelanAudioEngine {
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 3.2);
 
       osc.connect(gain);
-      gain.connect(this.audioCtx.destination);
+      if (this.masterGain) {
+        gain.connect(this.masterGain);
+      } else {
+        gain.connect(this.audioCtx.destination);
+      }
 
       osc.start(now);
       osc.stop(now + 3.3);

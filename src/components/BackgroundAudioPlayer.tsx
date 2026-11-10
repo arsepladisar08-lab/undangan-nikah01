@@ -5,7 +5,10 @@ import { GamelanAudioEngine } from '../utils/audio';
 export interface BackgroundAudioPlayerRef {
   play: () => Promise<boolean>;
   pause: () => void;
-  toggle: () => void;
+  toggle: () => void; // Mute / Unmute toggle (keeps playback running in background)
+  toggleMute: () => boolean;
+  setMuted: (muted: boolean) => void;
+  isMuted: boolean;
   isPlaying: boolean;
   currentTitle: string;
 }
@@ -13,6 +16,7 @@ export interface BackgroundAudioPlayerRef {
 interface BackgroundAudioPlayerProps {
   config: WeddingAudioConfig;
   onStateChange: (isPlaying: boolean) => void;
+  onMuteChange?: (isMuted: boolean) => void;
   onAudioError?: (errorMessage: string) => void;
 }
 
@@ -51,6 +55,9 @@ interface YTPlayerInstance {
   stopVideo: () => void;
   seekTo: (seconds: number, allowSeekAhead?: boolean) => void;
   setVolume: (volume: number) => void;
+  mute: () => void;
+  unMute: () => void;
+  isMuted: () => boolean;
   getPlayerState: () => number;
   destroy: () => void;
   loadVideoById: (options: { videoId: string; startSeconds?: number }) => void;
@@ -58,34 +65,54 @@ interface YTPlayerInstance {
 }
 
 export const BackgroundAudioPlayer = forwardRef<BackgroundAudioPlayerRef, BackgroundAudioPlayerProps>(
-  ({ config, onStateChange, onAudioError }, ref) => {
+  ({ config, onStateChange, onMuteChange, onAudioError }, ref) => {
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isMuted, setIsMuted] = useState(false);
     const [ytReady, setYtReady] = useState(false);
 
     const gamelanEngineRef = useRef<GamelanAudioEngine | null>(null);
     const ytPlayerRef = useRef<YTPlayerInstance | null>(null);
     const playerContainerId = useRef(`yt-audio-frame-${Math.random().toString(36).substring(2, 9)}`);
     const wantsPlayRef = useRef(false);
+    const isMutedRef = useRef(false);
+
+    // Sync isMutedRef
+    useEffect(() => {
+      isMutedRef.current = isMuted;
+    }, [isMuted]);
 
     // Initialize or reconfigure audio engines when config changes
     useEffect(() => {
       // 1. Initialize Gamelan Engine
       if (!gamelanEngineRef.current) {
-        gamelanEngineRef.current = new GamelanAudioEngine((playing) => {
-          if (config.mode === 'gamelan') {
-            setIsPlaying(playing);
-            onStateChange(playing);
+        gamelanEngineRef.current = new GamelanAudioEngine(
+          (playing) => {
+            if (config.mode === 'gamelan') {
+              setIsPlaying(playing);
+              onStateChange(playing);
+            }
+          },
+          (muted) => {
+            if (config.mode === 'gamelan') {
+              setIsMuted(muted);
+              onMuteChange?.(muted);
+            }
           }
-        });
+        );
       }
 
       // 2. Initialize YouTube IFrame API if in youtube mode
       if (config.mode === 'youtube' && config.youtubeId) {
         loadYouTubeApi(() => {
-          initYouTubePlayer(config.youtubeId, config.volume, config.startSeconds, config.loop);
+          initYouTubePlayer(
+            config.youtubeId,
+            config.volume != null ? config.volume : 75,
+            config.startSeconds,
+            config.loop
+          );
         });
       } else if (config.mode === 'gamelan') {
-        // If switched to gamelan, pause YouTube player if active
+        // If switched to gamelan, mute/pause YouTube player if active
         if (ytPlayerRef.current) {
           try {
             ytPlayerRef.current.pauseVideo();
@@ -94,22 +121,27 @@ export const BackgroundAudioPlayer = forwardRef<BackgroundAudioPlayerRef, Backgr
           }
         }
       }
-
-      return () => {
-        // cleanup on unmount
-      };
     }, [config.mode, config.youtubeId]);
 
-    // Handle volume or start time updates for YouTube
+    // Handle volume updates
     useEffect(() => {
+      const targetVol = config.volume != null ? config.volume : 75;
       if (config.mode === 'youtube' && ytPlayerRef.current && ytReady) {
         try {
-          ytPlayerRef.current.setVolume(config.volume);
+          if (isMuted) {
+            ytPlayerRef.current.setVolume(0);
+            ytPlayerRef.current.mute();
+          } else {
+            ytPlayerRef.current.unMute();
+            ytPlayerRef.current.setVolume(targetVol);
+          }
         } catch {
           // ignore
         }
+      } else if (config.mode === 'gamelan' && gamelanEngineRef.current) {
+        gamelanEngineRef.current.setVolume(targetVol);
       }
-    }, [config.volume, ytReady, config.mode]);
+    }, [config.volume, ytReady, config.mode, isMuted]);
 
     // Cleanup everything on unmount
     useEffect(() => {
@@ -165,7 +197,13 @@ export const BackgroundAudioPlayer = forwardRef<BackgroundAudioPlayerRef, Backgr
             videoId,
             startSeconds,
           });
-          ytPlayerRef.current.setVolume(volume);
+          if (isMutedRef.current) {
+            ytPlayerRef.current.mute();
+            ytPlayerRef.current.setVolume(0);
+          } else {
+            ytPlayerRef.current.unMute();
+            ytPlayerRef.current.setVolume(volume);
+          }
           return;
         } catch {
           try {
@@ -196,7 +234,13 @@ export const BackgroundAudioPlayer = forwardRef<BackgroundAudioPlayerRef, Backgr
             onReady: (event) => {
               setYtReady(true);
               try {
-                event.target.setVolume(volume);
+                if (isMutedRef.current) {
+                  event.target.mute();
+                  event.target.setVolume(0);
+                } else {
+                  event.target.unMute();
+                  event.target.setVolume(volume);
+                }
                 if (wantsPlayRef.current) {
                   event.target.playVideo();
                 }
@@ -230,7 +274,6 @@ export const BackgroundAudioPlayer = forwardRef<BackgroundAudioPlayerRef, Backgr
               }
             },
             onError: (event) => {
-              // Code 100/101/150: Video not found or embedding restricted
               const code = event.data;
               const errorText =
                 code === 101 || code === 150
@@ -255,10 +298,18 @@ export const BackgroundAudioPlayer = forwardRef<BackgroundAudioPlayerRef, Backgr
 
     const playAudio = async (): Promise<boolean> => {
       wantsPlayRef.current = true;
+      const targetVolume = config.volume != null ? config.volume : 75;
+
       if (config.mode === 'youtube') {
         if (ytPlayerRef.current) {
           try {
-            ytPlayerRef.current.setVolume(config.volume);
+            if (isMutedRef.current) {
+              ytPlayerRef.current.mute();
+              ytPlayerRef.current.setVolume(0);
+            } else {
+              ytPlayerRef.current.unMute();
+              ytPlayerRef.current.setVolume(targetVolume);
+            }
             ytPlayerRef.current.playVideo();
             setIsPlaying(true);
             onStateChange(true);
@@ -267,10 +318,11 @@ export const BackgroundAudioPlayer = forwardRef<BackgroundAudioPlayerRef, Backgr
             // fallback
           }
         }
-        // If YT is not ready yet, mark wantsPlay
         return false;
       } else {
         if (gamelanEngineRef.current) {
+          gamelanEngineRef.current.setMuted(isMutedRef.current);
+          gamelanEngineRef.current.setVolume(targetVolume);
           const ok = await gamelanEngineRef.current.start();
           setIsPlaying(ok);
           onStateChange(ok);
@@ -299,19 +351,64 @@ export const BackgroundAudioPlayer = forwardRef<BackgroundAudioPlayerRef, Backgr
       onStateChange(false);
     };
 
-    const toggleAudio = () => {
-      if (isPlaying) {
-        pauseAudio();
+    /**
+     * Mute / Unmute:
+     * Strictly controls volume (0% vs target volume) while keeping playback
+     * running in the background at all times without pausing.
+     */
+    const setMutedState = (nextMuted: boolean) => {
+      setIsMuted(nextMuted);
+      isMutedRef.current = nextMuted;
+      onMuteChange?.(nextMuted);
+
+      const targetVolume = config.volume != null ? config.volume : 75;
+
+      if (config.mode === 'youtube') {
+        if (ytPlayerRef.current) {
+          try {
+            if (nextMuted) {
+              ytPlayerRef.current.mute();
+              ytPlayerRef.current.setVolume(0);
+            } else {
+              ytPlayerRef.current.unMute();
+              ytPlayerRef.current.setVolume(targetVolume);
+            }
+            // CRITICAL: Ensure playback continues in the background!
+            try {
+              ytPlayerRef.current.playVideo();
+            } catch {
+              // ignore
+            }
+          } catch {
+            // ignore
+          }
+        }
       } else {
-        void playAudio();
+        if (gamelanEngineRef.current) {
+          gamelanEngineRef.current.setMuted(nextMuted);
+          gamelanEngineRef.current.setVolume(targetVolume);
+          // Ensure gamelan keeps running in background
+          if (!gamelanEngineRef.current.getIsPlaying()) {
+            void gamelanEngineRef.current.start();
+          }
+        }
       }
+    };
+
+    const toggleMute = (): boolean => {
+      const next = !isMutedRef.current;
+      setMutedState(next);
+      return next;
     };
 
     // Imperative API for Parent
     useImperativeHandle(ref, () => ({
       play: playAudio,
       pause: pauseAudio,
-      toggle: toggleAudio,
+      toggle: toggleMute, // Toggles mute/unmute so music keeps playing in background
+      toggleMute,
+      setMuted: setMutedState,
+      isMuted,
       isPlaying,
       currentTitle:
         config.mode === 'youtube'

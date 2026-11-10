@@ -24,6 +24,8 @@ import {
   CUSTOM_PHOTOS_STORAGE_KEY,
   APPS_SCRIPT_URL_STORAGE_KEY,
   fetchPhotosFromAppsScript,
+  saveAudioToAppsScript,
+  fetchAudioFromAppsScript,
   isCurrentlyAdminAuthenticated,
   setAdminAuthenticated,
   verifyAdminPin,
@@ -32,6 +34,7 @@ import {
 export default function App() {
   const [isGateOpen, setIsGateOpen] = useState(false);
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
+  const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [guestName, setGuestName] = useState('Keluarga Besar Bapak K.R.T. H. Suryo Diningrat');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeMapVenue, setActiveMapVenue] = useState<VenueDetail | null>(null);
@@ -120,16 +123,27 @@ export default function App() {
       }
     }
 
-    // Auto-fetch latest photos from Google Apps Script if URL is saved
+    // Auto-fetch latest photos, audio config & guests from Google Apps Script / Spreadsheet if configured
     try {
       const savedAppsScriptUrl = localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY);
-      if (savedAppsScriptUrl) {
+      if (savedAppsScriptUrl && savedAppsScriptUrl.startsWith('http')) {
+        // 1. Fetch latest photos from Spreadsheet / Drive
         void fetchPhotosFromAppsScript(savedAppsScriptUrl).then((remote) => {
           if (remote && Object.keys(remote).length > 0) {
             setPhotos((prev) => ({ ...prev, ...remote }));
           }
         }).catch(() => {
           // Silent fallback to local photos
+        });
+
+        // 2. Fetch latest YouTube / Audio config from Spreadsheet
+        void fetchAudioFromAppsScript(savedAppsScriptUrl).then((remoteAudio) => {
+          if (remoteAudio) {
+            setAudioConfig(remoteAudio);
+            saveAudioConfig(remoteAudio);
+          }
+        }).catch(() => {
+          // Silent fallback to local audio config
         });
       }
     } catch {
@@ -153,13 +167,32 @@ export default function App() {
 
   const handleToggleAudio = () => {
     if (audioPlayerRef.current) {
-      audioPlayerRef.current.toggle();
+      if (!isPlayingMusic) {
+        void audioPlayerRef.current.play();
+      } else {
+        const nextMuted = audioPlayerRef.current.toggleMute();
+        setIsAudioMuted(nextMuted);
+      }
     }
   };
 
-  const handleUpdateAudioConfig = (newConfig: WeddingAudioConfig) => {
+  const handleUpdateAudioConfig = async (newConfig: WeddingAudioConfig) => {
     setAudioConfig(newConfig);
     saveAudioConfig(newConfig);
+
+    const savedAppsScriptUrl = localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY);
+    if (savedAppsScriptUrl && savedAppsScriptUrl.startsWith('http')) {
+      try {
+        await saveAudioToAppsScript(savedAppsScriptUrl, newConfig);
+        handleShowToast(
+          `Pengiring musik otomatis tersimpan ke Google Spreadsheet: ${newConfig.mode === 'youtube' ? newConfig.title : 'Gamelan Slendro'}`
+        );
+        return;
+      } catch (err: unknown) {
+        console.warn('Auto-save audio to spreadsheet error:', err);
+      }
+    }
+
     handleShowToast(
       `Pengiring musik diperbarui: ${newConfig.mode === 'youtube' ? newConfig.title : 'Gamelan Slendro'}`
     );
@@ -264,12 +297,14 @@ export default function App() {
         ref={audioPlayerRef}
         config={audioConfig}
         onStateChange={setIsPlayingMusic}
+        onMuteChange={setIsAudioMuted}
         onAudioError={(err) => handleShowToast(err)}
       />
 
       {/* Floating Audio Ambience Toggle */}
       <FloatingAudioControl
         isPlaying={isPlayingMusic}
+        isMuted={isAudioMuted}
         onToggle={handleToggleAudio}
         visible={isGateOpen}
         trackTitle={audioConfig.mode === 'youtube' ? audioConfig.title : 'Gamelan Slendro Ambience'}

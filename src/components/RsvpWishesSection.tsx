@@ -3,6 +3,11 @@ import { WishItem } from '../types/wedding';
 import { Send, CheckCircle2, MessageSquareHeart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AnimatedHeading } from './AnimatedText';
+import {
+  APPS_SCRIPT_URL_STORAGE_KEY,
+  saveRsvpToAppsScript,
+  fetchRsvpFromAppsScript,
+} from '../utils/appsScriptClient';
 
 interface RsvpWishesSectionProps {
   onShowToast: (msg: string) => void;
@@ -62,7 +67,24 @@ export const RsvpWishesSection: React.FC<RsvpWishesSectionProps> = ({ onShowToas
     }
   }, [wishes]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Sync with remote Google Sheet if connected
+  useEffect(() => {
+    try {
+      const savedUrl = localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY);
+      if (savedUrl && savedUrl.startsWith('http')) {
+        void fetchRsvpFromAppsScript(savedUrl).then((remoteWishes) => {
+          if (remoteWishes && remoteWishes.length > 0) {
+            setWishes(remoteWishes);
+            localStorage.setItem('bagaskara_sekar_wishes', JSON.stringify(remoteWishes));
+          }
+        }).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !message.trim()) return;
 
@@ -76,12 +98,23 @@ export const RsvpWishesSection: React.FC<RsvpWishesSectionProps> = ({ onShowToas
       timestamp: 'Just now',
     };
 
-    setWishes((prev) => [newWish, ...prev]);
+    const updated = [newWish, ...wishes];
+    setWishes(updated);
     setName('');
     setMessage('');
     setIsSubmitting(false);
 
     onShowToast("Jazakumullahu Khairan! Your RSVP and Du'a have been sent.");
+
+    // Send to Google Sheet in background
+    try {
+      const savedUrl = localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY);
+      if (savedUrl && savedUrl.startsWith('http')) {
+        void saveRsvpToAppsScript(savedUrl, newWish);
+      }
+    } catch {
+      // ignore
+    }
   };
 
   return (

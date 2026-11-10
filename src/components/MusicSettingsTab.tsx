@@ -28,12 +28,16 @@ interface MusicSettingsTabProps {
   currentConfig: WeddingAudioConfig;
   onSaveConfig: (newConfig: WeddingAudioConfig) => void;
   onShowToast: (message: string) => void;
+  isAppsScriptConnected?: boolean;
+  appsScriptUrl?: string;
 }
 
 export const MusicSettingsTab: React.FC<MusicSettingsTabProps> = ({
   currentConfig,
   onSaveConfig,
   onShowToast,
+  isAppsScriptConnected = false,
+  appsScriptUrl,
 }) => {
   const [mode, setMode] = useState<AudioSourceMode>(currentConfig.mode);
   const [youtubeUrl, setYoutubeUrl] = useState(currentConfig.youtubeUrl);
@@ -138,11 +142,33 @@ export const MusicSettingsTab: React.FC<MusicSettingsTabProps> = ({
         </div>
         <button
           onClick={handleSave}
-          className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gold-600 hover:bg-gold-700 text-white text-xs font-cinzel font-bold shadow-md transition-all shrink-0 flex items-center justify-center gap-2"
+          className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gold-600 hover:bg-gold-700 text-white text-xs font-cinzel font-bold shadow-md transition-all shrink-0 flex items-center justify-center gap-2 cursor-pointer"
         >
           <Check className="w-4 h-4" />
-          <span>Simpan Pengaturan</span>
+          <span>Simpan &amp; Terapkan Musik</span>
         </button>
+      </div>
+
+      {/* Database Spreadsheet Auto-Sync Status */}
+      <div className={`p-3.5 rounded-2xl border text-xs flex items-center gap-3 transition-colors ${
+        isAppsScriptConnected
+          ? 'bg-emerald-50/80 border-emerald-300 text-emerald-900'
+          : 'bg-amber-50/80 border-amber-300 text-amber-900'
+      }`}>
+        <div className={`w-2.5 h-2.5 rounded-full shrink-0 animate-pulse ${
+          isAppsScriptConnected ? 'bg-emerald-500' : 'bg-amber-500'
+        }`} />
+        <div className="flex-1">
+          {isAppsScriptConnected ? (
+            <p>
+              <strong>Auto-Sync Database Spreadsheet Aktif:</strong> Setiap kali Anda memilih preset atau memasukkan tautan YouTube lalu menekan <em>"Simpan &amp; Terapkan Musik"</em>, tautan YouTube <strong>otomatis tersimpan &amp; otomatis terganti di sheet "Audio" Google Spreadsheet</strong>. Semua tamu yang membuka undangan akan otomatis memutar lagu ini.
+            </p>
+          ) : (
+            <p>
+              <strong>Tips Sinkronisasi Database:</strong> Masukkan URL Google Apps Script Anda di tab <strong>Pengaturan</strong> agar link YouTube otomatis tersimpan &amp; diperbarui di database Google Spreadsheet.
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Mode Switcher Cards */}

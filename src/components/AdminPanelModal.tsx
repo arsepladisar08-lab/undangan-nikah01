@@ -22,6 +22,7 @@ import {
   LogOut,
   ShieldCheck,
   Music,
+  HeartHandshake,
 } from 'lucide-react';
 import {
   PhotoSlotKey,
@@ -32,6 +33,7 @@ import {
 } from '../types/photos';
 import { WeddingAudioConfig } from '../types/audio';
 import { MusicSettingsTab } from './MusicSettingsTab';
+import { RsvpSummaryTab } from './RsvpSummaryTab';
 import {
   APPS_SCRIPT_URL_STORAGE_KEY,
   CUSTOM_PHOTOS_STORAGE_KEY,
@@ -76,7 +78,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   audioConfig,
   onUpdateAudioConfig,
 }) => {
-  const [activeTab, setActiveTab] = useState<'guests' | 'photos' | 'music' | 'settings'>('guests');
+  const [activeTab, setActiveTab] = useState<'guests' | 'rsvp' | 'photos' | 'music' | 'settings'>('guests');
 
   // Public domain configuration (e.g. https://bagaskara-sekar.vercel.app or netlify.app)
   const [publicDomain, setPublicDomain] = useState('');
@@ -99,6 +101,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [batchNamesInput, setBatchNamesInput] = useState('');
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [isSyncingGuests, setIsSyncingGuests] = useState(false);
+  const [lastGuestsSyncedAt, setLastGuestsSyncedAt] = useState<Date | null>(null);
+  const [isAutoSyncingGuests, setIsAutoSyncingGuests] = useState(false);
 
   // Photos state
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -115,6 +119,25 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   // Calculate effective base URL (prefers custom public domain like Vercel/Netlify if set)
   const baseUrl = getEffectiveBaseUrl(publicDomain);
 
+  // Auto-sync guests & links to Google Spreadsheet
+  const triggerAutoSaveGuests = async (updatedGuests: GuestItem[], successMsg?: string) => {
+    const url = appsScriptUrl.trim();
+    if (!url || !url.startsWith('http')) return;
+
+    setIsAutoSyncingGuests(true);
+    try {
+      await saveGuestsToAppsScript(url, updatedGuests);
+      setLastGuestsSyncedAt(new Date());
+      if (successMsg) {
+        onShowToast(successMsg);
+      }
+    } catch (err: unknown) {
+      console.warn('Auto-save guests error:', err);
+    } finally {
+      setIsAutoSyncingGuests(false);
+    }
+  };
+
   // Load saved state on mount
   useEffect(() => {
     try {
@@ -130,6 +153,16 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       const savedUrl = localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY);
       if (savedUrl) {
         setAppsScriptUrl(savedUrl);
+        // Automatically fetch guests from Google Spreadsheet if available
+        void fetchGuestsFromAppsScript(savedUrl).then((remoteGuests) => {
+          if (remoteGuests && remoteGuests.length > 0) {
+            setGuests(remoteGuests);
+            localStorage.setItem(GUESTS_STORAGE_KEY, JSON.stringify(remoteGuests));
+            setLastGuestsSyncedAt(new Date());
+          }
+        }).catch(() => {
+          // ignore
+        });
       }
 
       const savedGuests = localStorage.getItem(GUESTS_STORAGE_KEY);
@@ -194,6 +227,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       setGuests(updated);
       localStorage.setItem(GUESTS_STORAGE_KEY, JSON.stringify(updated));
       onShowToast(`Domain publik berhasil disetel ke ${normalized}!`);
+      void triggerAutoSaveGuests(updated, 'Tautan khusus tamu otomatis diperbarui di Google Spreadsheet!');
     } else {
       // Reset to browser origin
       setPublicDomain('');
@@ -207,6 +241,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       setGuests(updated);
       localStorage.setItem(GUESTS_STORAGE_KEY, JSON.stringify(updated));
       onShowToast('Domain publik direset ke domain browser.');
+      void triggerAutoSaveGuests(updated);
     }
   };
 
@@ -290,6 +325,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setNewGuestPhone('');
     setNewGuestNotes('');
     onShowToast(`Tamu "${name}" berhasil ditambahkan!`);
+    void triggerAutoSaveGuests(updated, `Tamu "${name}" otomatis tersimpan ke Spreadsheet!`);
   };
 
   // Add batch guests from newline-separated text
@@ -318,6 +354,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setBatchNamesInput('');
     setShowBatchModal(false);
     onShowToast(`${lines.length} tamu berhasil ditambahkan sekaligus!`);
+    void triggerAutoSaveGuests(updated, `${lines.length} tamu otomatis tersimpan ke Spreadsheet!`);
   };
 
   // Delete guest
@@ -326,6 +363,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setGuests(updated);
     localStorage.setItem(GUESTS_STORAGE_KEY, JSON.stringify(updated));
     onShowToast(`Tamu "${name}" telah dihapus.`);
+    void triggerAutoSaveGuests(updated, `Daftar tamu di Spreadsheet otomatis diperbarui.`);
   };
 
   // Copy text helper
@@ -501,10 +539,16 @@ function doGet(e) {
     var params = e ? e.parameter : {};
     var action = params ? params.action : "getPhotos";
     if (action === "ping") {
-      return createJsonResponse({ status: "success", message: "Active!" });
+      return createJsonResponse({ status: "success", message: "Google Apps Script Backend Aktif!" });
+    }
+    if (action === "getAudio") {
+      return createJsonResponse({ status: "success", data: getAudioFromSheet() });
     }
     if (action === "getGuests") {
       return createJsonResponse({ status: "success", data: getGuestsFromSheet() });
+    }
+    if (action === "getRsvp") {
+      return createJsonResponse({ status: "success", data: getRsvpFromSheet() });
     }
     return createJsonResponse({ status: "success", data: getPhotosFromSheet() });
   } catch (err) {
@@ -515,16 +559,57 @@ function doGet(e) {
 function doPost(e) {
   try {
     var data = (e.postData && e.postData.contents) ? JSON.parse(e.postData.contents) : e.parameter;
-    if (data.action === "uploadPhoto") {
-      return createJsonResponse({ status: "success", data: handlePhotoUpload(data) });
+    if (data.action === "saveAudio") {
+      return createJsonResponse({ status: "success", data: handleSaveAudio(data.config) });
     }
     if (data.action === "saveGuests") {
       return createJsonResponse({ status: "success", count: handleSaveGuests(data.guests) });
     }
-    return createJsonResponse({ status: "error", message: "Action unknown" });
+    if (data.action === "saveRsvp") {
+      return createJsonResponse({ status: "success", data: handleSaveRsvp(data.rsvp) });
+    }
+    if (data.action === "uploadPhoto") {
+      return createJsonResponse({ status: "success", data: handlePhotoUpload(data) });
+    }
+    return createJsonResponse({ status: "error", message: "Action unknown: " + data.action });
   } catch (err) {
     return createJsonResponse({ status: "error", message: err.toString() });
   }
+}
+
+function handleSaveAudio(config) {
+  if (!config) return null;
+  var sheet = getOrCreateSheet("Audio", ["Mode", "YouTube ID", "YouTube URL", "Judul Musik", "Volume", "Loop", "Mulai (Detik)", "Terakhir Diperbarui"]);
+  var now = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd HH:mm:ss");
+  sheet.getRange(2, 1, 1, 8).setValues([[
+    config.mode || "youtube",
+    config.youtubeId || "",
+    config.youtubeUrl || "",
+    config.title || "",
+    config.volume != null ? config.volume : 75,
+    config.loop != null ? config.loop : true,
+    config.startSeconds || 0,
+    now
+  ]]);
+  return config;
+}
+
+function getAudioFromSheet() {
+  var sheet = getOrCreateSheet("Audio", ["Mode", "YouTube ID", "YouTube URL", "Judul Musik", "Volume", "Loop", "Mulai (Detik)", "Terakhir Diperbarui"]);
+  var last = sheet.getLastRow();
+  if (last < 2) return null;
+  var row = sheet.getRange(2, 1, 1, 8).getValues()[0];
+  if (!row[0] && !row[1]) return null;
+  return {
+    mode: row[0] || "youtube",
+    youtubeId: row[1] || "",
+    youtubeUrl: row[2] || "",
+    title: row[3] || "",
+    volume: Number(row[4]) || 75,
+    loop: row[5] === true || row[5] === "TRUE" || row[5] === 1,
+    startSeconds: Number(row[6]) || 0,
+    updatedAt: row[7] || ""
+  };
 }
 
 function handlePhotoUpload(data) {
@@ -566,7 +651,7 @@ function getPhotosFromSheet() {
 
 function handleSaveGuests(guests) {
   if (!guests || !Array.isArray(guests)) return 0;
-  var sheet = getOrCreateSheet("Guests", ["ID", "Nama Tamu", "No WhatsApp", "Tautan Undangan", "Catatan", "Terakhir Diperbarui"]);
+  var sheet = getOrCreateSheet("Guests", ["ID", "Nama Tamu", "No WhatsApp", "Tautan Undangan Khusus", "Catatan", "Terakhir Diperbarui"]);
   var last = sheet.getLastRow();
   if (last > 1) sheet.getRange(2, 1, last - 1, 6).clearContent();
   var now = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd HH:mm:ss");
@@ -578,7 +663,7 @@ function handleSaveGuests(guests) {
 }
 
 function getGuestsFromSheet() {
-  var sheet = getOrCreateSheet("Guests", ["ID", "Nama Tamu", "No WhatsApp", "Tautan Undangan", "Catatan", "Terakhir Diperbarui"]);
+  var sheet = getOrCreateSheet("Guests", ["ID", "Nama Tamu", "No WhatsApp", "Tautan Undangan Khusus", "Catatan", "Terakhir Diperbarui"]);
   var data = sheet.getDataRange().getValues();
   var guests = [];
   for (var i = 1; i < data.length; i++) {
@@ -587,6 +672,41 @@ function getGuestsFromSheet() {
     }
   }
   return guests;
+}
+
+function handleSaveRsvp(rsvp) {
+  if (!rsvp) return null;
+  var sheet = getOrCreateSheet("RSVP", ["ID", "Nama Tamu", "Kehadiran", "Jumlah Tamu (Pax)", "Doa & Ucapan", "Waktu Respon"]);
+  var now = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd HH:mm:ss");
+  var row = [
+    rsvp.id || ("rsvp_" + new Date().getTime()),
+    rsvp.name || "",
+    rsvp.attendance || "attending",
+    rsvp.guestCount || "1 Person",
+    rsvp.message || "",
+    rsvp.timestamp || now
+  ];
+  sheet.appendRow(row);
+  return rsvp;
+}
+
+function getRsvpFromSheet() {
+  var sheet = getOrCreateSheet("RSVP", ["ID", "Nama Tamu", "Kehadiran", "Jumlah Tamu (Pax)", "Doa & Ucapan", "Waktu Respon"]);
+  var data = sheet.getDataRange().getValues();
+  var rsvps = [];
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][1]) {
+      rsvps.push({
+        id: data[i][0] || ("rsvp_" + i),
+        name: data[i][1],
+        attendance: data[i][2] || "attending",
+        guestCount: data[i][3] || "1 Person",
+        message: data[i][4] || "",
+        timestamp: data[i][5] || ""
+      });
+    }
+  }
+  return rsvps;
 }
 
 function getOrCreateSheet(name, headers) {
@@ -680,6 +800,17 @@ function createJsonResponse(obj) {
             <span>Buku Tamu & Link Khusus ({guests.length})</span>
           </button>
           <button
+            onClick={() => setActiveTab('rsvp')}
+            className={`py-3 px-4 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'rsvp'
+                ? 'border-gold-600 text-gold-800 font-bold bg-gold-100/40 rounded-t-lg'
+                : 'border-transparent text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            <HeartHandshake className="w-4 h-4 text-gold-600" />
+            <span>Ringkasan RSVP (Google Sheet)</span>
+          </button>
+          <button
             onClick={() => setActiveTab('photos')}
             className={`py-3 px-4 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'photos'
@@ -771,6 +902,40 @@ function createJsonResponse(obj) {
                     </button>
                   )}
                 </div>
+              </div>
+
+              {/* Google Spreadsheet Auto-Sync Status Badge for Guests */}
+              <div className={`p-3.5 rounded-2xl border text-xs flex items-center justify-between gap-3 ${
+                appsScriptUrl
+                  ? 'bg-emerald-50/80 border-emerald-300 text-emerald-900'
+                  : 'bg-amber-50/80 border-amber-300 text-amber-900'
+              }`}>
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                    isAutoSyncingGuests ? 'bg-blue-500 animate-ping' : (appsScriptUrl ? 'bg-emerald-500' : 'bg-amber-500')
+                  }`} />
+                  <div>
+                    {appsScriptUrl ? (
+                      <p>
+                        <strong>Auto-Sync Spreadsheet Aktif:</strong> Buku tamu &amp; link khusus undangan (?to=...) <strong>otomatis tersimpan ke sheet "Guests" Google Spreadsheet</strong> setiap kali Anda menambah, mengedit, atau menghapus tamu.
+                        {lastGuestsSyncedAt && (
+                          <span className="ml-1 text-[11px] text-emerald-700 font-medium">
+                            (Terakhir disinkronkan: {lastGuestsSyncedAt.toLocaleTimeString()})
+                          </span>
+                        )}
+                      </p>
+                    ) : (
+                      <p>
+                        <strong>Penyimpanan Lokal Aktif:</strong> Sambungkan URL Google Apps Script di tab <strong>Pengaturan</strong> agar buku tamu &amp; link khusus otomatis tersimpan di Google Spreadsheet.
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {isAutoSyncingGuests && (
+                  <span className="text-[11px] font-mono text-blue-700 animate-pulse whitespace-nowrap">
+                    Menyimpan otomatis...
+                  </span>
+                )}
               </div>
 
               {/* Top Banner explaining personalized links */}
@@ -966,6 +1131,14 @@ function createJsonResponse(obj) {
             </div>
           )}
 
+          {/* TAB: RSVP SUMMARY (GOOGLE SHEET) */}
+          {activeTab === 'rsvp' && (
+            <RsvpSummaryTab
+              appsScriptUrl={appsScriptUrl}
+              onShowToast={onShowToast}
+            />
+          )}
+
           {/* TAB 2: PHOTO MANAGEMENT & GOOGLE DRIVE */}
           {activeTab === 'photos' && (
             <div className="space-y-6">
@@ -1121,6 +1294,8 @@ function createJsonResponse(obj) {
               currentConfig={audioConfig}
               onSaveConfig={onUpdateAudioConfig}
               onShowToast={onShowToast}
+              isAppsScriptConnected={connectionStatus === 'connected' || !!appsScriptUrl}
+              appsScriptUrl={appsScriptUrl}
             />
           )}
 
