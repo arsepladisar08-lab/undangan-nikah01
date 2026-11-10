@@ -65,6 +65,9 @@ function doPost(e) {
 
     requireAdmin_(data.token);
 
+    if (action === "getGuests") {
+      return json_({ status: "success", data: getGuests_() });
+    }
     if (action === "adminLogout") {
       revokeAdminSession_(data.token);
       return json_({ status: "success" });
