@@ -38,10 +38,6 @@ function doGet(e) {
       // The invitation intentionally displays approved RSVP wishes publicly.
       return json_({ status: "success", data: getRsvp_() });
     }
-    if (action === "getGuests") {
-      requireAdmin_(params.token);
-      return json_({ status: "success", data: getGuests_() });
-    }
     return json_({ status: "error", message: "Aksi tidak dikenal." });
   } catch (err) {
     Logger.log("doGet error: " + err);
