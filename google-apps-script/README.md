@@ -19,11 +19,11 @@ Daftar tamu (termasuk nomor WhatsApp dan catatan) hanya dapat dibaca menggunakan
 
 ## 2. Siapkan PIN admin di server
 
-1. Di editor Apps Script, pilih fungsi `setupAdminPin` lalu klik **Run/Jalankan**.
-2. Berikan izin yang diminta Google.
-3. Masukkan PIN/passphrase unik minimal **10 karakter**. Jangan memakai tanggal lahir, tanggal acara, atau PIN mudah ditebak.
-4. PIN disimpan sebagai salted SHA-256 hash di **Script Properties**, bukan teks biasa.
-5. Sesi login berlaku maksimal 6 jam. Lima percobaan login gagal memicu cooldown global 15 menit.
+1. Di Apps Script, buka **Project Settings** (ikon roda gigi) → **Script Properties** → **Add script property**.
+2. Tambahkan properti sementara bernama `ADMIN_SETUP_PIN`. Isi nilainya dengan passphrase unik minimal **10 karakter**. Jangan memakai tanggal lahir, tanggal acara, atau PIN mudah ditebak.
+3. Simpan pengaturan project, kembali ke editor, pilih fungsi `setupAdminPin`, lalu klik **Run/Jalankan**. Fungsi ini tidak menggunakan dialog Spreadsheet sehingga dapat dijalankan langsung dari editor.
+4. Berikan izin yang diminta Google. Setelah sukses, fungsi akan menyimpan salted SHA-256 hash ke Script Properties dan otomatis menghapus `ADMIN_SETUP_PIN` plaintext.
+5. Sesi login berlaku maksimal 6 jam. Lima percobaan login gagal dari browser yang sama memicu cooldown 15 menit.
 
 Jika mengganti PIN, lakukan dari tab keamanan pada panel admin. Sesi saat ini akan berakhir dan pemilik perlu login kembali.
 
@@ -62,6 +62,6 @@ Pada perangkat pemilik, URL juga dapat disimpan melalui tab Pengaturan Google Ap
 - Google Apps Script Web App tetap harus dapat dijangkau publik agar tamu dapat RSVP tanpa login Google. Karena itu, **semua operasi tulis admin wajib memeriksa token di server**.
 - Feed RSVP publik memang ditampilkan di undangan. Jangan masukkan data sensitif ke kolom ucapan.
 - Foto yang diunggah dibuat dapat dilihat oleh siapa pun yang memiliki tautan, sesuai kebutuhan galeri publik.
-- Pembatasan login pada Apps Script menggunakan cooldown global karena Apps Script Web App tidak menyediakan alamat IP klien sebagai bagian dari event request standar. Pemilik dapat terkunci sementara jika banyak percobaan gagal.
+- Pembatasan login menggunakan cooldown per identitas browser. Ini mitigasi dasar, bukan rate limit berbasis IP; membersihkan penyimpanan browser dapat membuat identitas baru.
 - Periksa izin Drive dan Spreadsheet milik akun pemilik. Kegagalan kebijakan berbagi file akan membuat upload gagal secara eksplisit.
 - Jangan mengandalkan localStorage/sessionStorage sebagai otorisasi. Browser hanya menyimpan token sesi; server menentukan apakah token masih sah.
