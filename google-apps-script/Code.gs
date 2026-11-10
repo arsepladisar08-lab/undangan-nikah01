@@ -97,19 +97,26 @@ function doPost(e) {
 }
 
 /**
- * Run manually from the Apps Script editor (spreadsheet-bound script).
- * No default PIN is created. Choose a unique PIN/passphrase of at least 10 chars.
+ * One-time, UI-independent bootstrap for the first admin PIN.
+ *
+ * Before running this function, add a temporary Script Property:
+ *   ADMIN_SETUP_PIN = a unique passphrase of at least 10 characters
+ *
+ * The function hashes the passphrase and deletes the temporary plaintext property.
+ * It can be run from the Apps Script editor without SpreadsheetApp.getUi().
  */
 function setupAdminPin() {
-  var ui = SpreadsheetApp.getUi();
-  var result = ui.prompt(
-    "Aktifkan keamanan admin",
-    "Masukkan PIN/passphrase baru (minimal 10 karakter). PIN tidak akan disimpan sebagai teks.",
-    ui.ButtonSet.OK_CANCEL
-  );
-  if (result.getSelectedButton() !== ui.Button.OK) return;
-  setAdminPin_(result.getResponseText());
-  ui.alert("Keamanan admin aktif. Deploy ulang Web App agar kode terbaru digunakan.");
+  var properties = PropertiesService.getScriptProperties();
+  var pin = properties.getProperty("ADMIN_SETUP_PIN");
+  if (!pin) {
+    throw new Error(
+      "Script Property ADMIN_SETUP_PIN belum dibuat. Buka Project Settings → Script Properties, tambahkan ADMIN_SETUP_PIN dengan passphrase unik minimal 10 karakter, lalu jalankan fungsi ini lagi."
+    );
+  }
+
+  setAdminPin_(pin);
+  properties.deleteProperty("ADMIN_SETUP_PIN");
+  Logger.log("Keamanan admin berhasil disiapkan. ADMIN_SETUP_PIN plaintext telah dihapus.");
 }
 
 function setAdminPin_(pin) {
