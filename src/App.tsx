@@ -22,13 +22,14 @@ import { WeddingAudioConfig } from './types/audio';
 import { loadAudioConfig, saveAudioConfig } from './utils/audioConfig';
 import {
   CUSTOM_PHOTOS_STORAGE_KEY,
-  APPS_SCRIPT_URL_STORAGE_KEY,
   fetchPhotosFromAppsScript,
   saveAudioToAppsScript,
   fetchAudioFromAppsScript,
   isCurrentlyAdminAuthenticated,
-  setAdminAuthenticated,
-  verifyAdminPin,
+  getAppsScriptUrl,
+  getAdminToken,
+  clearAdminToken,
+  logoutAdminFromAppsScript,
 } from './utils/appsScriptClient';
 
 export default function App() {
@@ -47,23 +48,11 @@ export default function App() {
     if (typeof window === 'undefined') return false;
     try {
       const params = new URLSearchParams(window.location.search);
-      // Personalized Guest link: ALWAYS false
-      if (params.has('to') && !params.has('admin')) {
-        return false;
-      }
-      // Direct PIN unlock in query param: ?admin=1212
-      const adminParam = params.get('admin');
-      if (adminParam && verifyAdminPin(adminParam)) {
-        return true;
-      }
-      // Check ephemeral sessionStorage only when not viewing a guest invitation
-      if (!params.has('to')) {
-        return isCurrentlyAdminAuthenticated();
-      }
+      if (params.has('to') && !params.has('admin')) return false;
+      return isCurrentlyAdminAuthenticated();
     } catch {
-      // Fallback
+      return false;
     }
-    return false;
   });
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isPasscodeOpen, setIsPasscodeOpen] = useState(false);
@@ -99,55 +88,37 @@ export default function App() {
       setIsGateOpen(true);
     }
 
-    // STRICT ADMIN VISIBILITY ENFORCEMENT:
-    // If this is a personalized guest link (?to=...) and does NOT have explicit ?admin=...,
-    // unconditionally lock into Public Guest Mode with ZERO admin UI visible.
+    // Personalized guest links never expose the admin interface.
     if (toParam && !adminParam) {
       setIsAdmin(false);
       setIsAdminOpen(false);
       setIsPasscodeOpen(false);
-      setAdminAuthenticated(false);
+      clearAdminToken();
+    } else if (isCurrentlyAdminAuthenticated()) {
+      setIsAdmin(true);
+      if (adminParam) setIsAdminOpen(true);
     } else if (adminParam) {
-      // Admin trigger in URL (e.g. ?admin=1212 or ?admin=1)
-      if (verifyAdminPin(adminParam)) {
-        setAdminAuthenticated(true);
-        setIsAdmin(true);
-        setIsAdminOpen(true);
-      } else if (isCurrentlyAdminAuthenticated()) {
-        setIsAdmin(true);
-        setIsAdminOpen(true);
-      } else {
-        // Show passcode modal for admin verification
-        setIsAdmin(false);
-        setIsPasscodeOpen(true);
-      }
+      // ?admin=1 is only an entry point; authentication is always server-verified.
+      setIsAdmin(false);
+      setIsPasscodeOpen(true);
     }
 
-    // Auto-fetch latest photos, audio config & guests from Google Apps Script / Spreadsheet if configured
-    try {
-      const savedAppsScriptUrl = localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY);
-      if (savedAppsScriptUrl && savedAppsScriptUrl.startsWith('http')) {
-        // 1. Fetch latest photos from Spreadsheet / Drive
-        void fetchPhotosFromAppsScript(savedAppsScriptUrl).then((remote) => {
-          if (remote && Object.keys(remote).length > 0) {
-            setPhotos((prev) => ({ ...prev, ...remote }));
-          }
-        }).catch(() => {
-          // Silent fallback to local photos
-        });
-
-        // 2. Fetch latest YouTube / Audio config from Spreadsheet
-        void fetchAudioFromAppsScript(savedAppsScriptUrl).then((remoteAudio) => {
-          if (remoteAudio) {
-            setAudioConfig(remoteAudio);
-            saveAudioConfig(remoteAudio);
-          }
-        }).catch(() => {
-          // Silent fallback to local audio config
-        });
-      }
-    } catch {
-      // ignore
+    // Public backend URL is injected at build time so guest devices can load the same data.
+    const savedAppsScriptUrl = getAppsScriptUrl();
+    if (savedAppsScriptUrl) {
+      void fetchPhotosFromAppsScript(savedAppsScriptUrl).then((remote) => {
+        if (remote && Object.keys(remote).length > 0) setPhotos((prev) => ({ ...prev, ...remote }));
+      }).catch(() => {
+        // Keep the invitation usable with bundled photos if the backend is unavailable.
+      });
+      void fetchAudioFromAppsScript(savedAppsScriptUrl).then((remoteAudio) => {
+        if (remoteAudio) {
+          setAudioConfig(remoteAudio);
+          saveAudioConfig(remoteAudio);
+        }
+      }).catch(() => {
+        // Keep local audio configuration as fallback.
+      });
     }
 
     return () => {
@@ -180,22 +151,19 @@ export default function App() {
     setAudioConfig(newConfig);
     saveAudioConfig(newConfig);
 
-    const savedAppsScriptUrl = localStorage.getItem(APPS_SCRIPT_URL_STORAGE_KEY);
-    if (savedAppsScriptUrl && savedAppsScriptUrl.startsWith('http')) {
+    const savedAppsScriptUrl = getAppsScriptUrl();
+    if (savedAppsScriptUrl) {
       try {
-        await saveAudioToAppsScript(savedAppsScriptUrl, newConfig);
-        handleShowToast(
-          `Pengiring musik otomatis tersimpan ke Google Spreadsheet: ${newConfig.mode === 'youtube' ? newConfig.title : 'Gamelan Slendro'}`
-        );
+        await saveAudioToAppsScript(savedAppsScriptUrl, newConfig, getAdminToken());
+        handleShowToast('Pengaturan musik berhasil disimpan ke server.');
         return;
       } catch (err: unknown) {
-        console.warn('Auto-save audio to spreadsheet error:', err);
+        console.warn('Audio sync failed:', err);
+        handleShowToast(err instanceof Error ? err.message : 'Gagal menyimpan musik ke server. Perubahan hanya tersimpan di perangkat ini.');
+        return;
       }
     }
-
-    handleShowToast(
-      `Pengiring musik diperbarui: ${newConfig.mode === 'youtube' ? newConfig.title : 'Gamelan Slendro'}`
-    );
+    handleShowToast('URL backend belum dikonfigurasi. Perubahan musik hanya tersimpan di perangkat ini.');
   };
 
   const handleShowToast = (msg: string) => {
@@ -326,6 +294,7 @@ export default function App() {
 
       {/* Admin Passcode Authentication Modal */}
       <AdminPasscodeModal
+        webAppUrl={getAppsScriptUrl()}
         isOpen={isPasscodeOpen}
         onClose={() => setIsPasscodeOpen(false)}
         onSuccess={() => {
@@ -349,6 +318,7 @@ export default function App() {
           handleShowToast(`Melihat halaman pembuka untuk: ${name}`);
         }}
         onLogoutAdmin={() => {
+          void logoutAdminFromAppsScript(getAppsScriptUrl());
           setIsAdmin(false);
           setIsAdminOpen(false);
         }}

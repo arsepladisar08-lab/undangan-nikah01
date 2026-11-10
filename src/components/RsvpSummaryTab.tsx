@@ -32,32 +32,7 @@ interface RsvpSummaryTabProps {
   onShowToast: (message: string) => void;
 }
 
-const FALLBACK_INITIAL_WISHES: WishItem[] = [
-  {
-    id: 'w1',
-    name: 'K.R.T. H. Wicaksono Hadiningrat',
-    attendance: 'InshaAllah Attending',
-    guestCount: '2 Persons',
-    message: "Barakallahu lakuma wa baraka 'alaikuma wa jama'a bainakuma fii khair. May Allah bless your household with eternal Sakinah, Mawaddah, wa Rahmah.",
-    timestamp: 'Kemarin, 14:20 WIB',
-  },
-  {
-    id: 'w2',
-    name: 'dr. Hj. Maharani Puspitasari, Sp.A',
-    attendance: 'InshaAllah Attending',
-    guestCount: '2 Persons',
-    message: 'Alhamdulillah, so happy to witness both of you uniting in marriage! Wishing you righteous offspring and endless blessings.',
-    timestamp: '2 hari lalu',
-  },
-  {
-    id: 'w3',
-    name: 'H. Dimas Prasetyo Nugroho, S.T.',
-    attendance: 'Regretfully Unable',
-    guestCount: '1 Person',
-    message: 'Warmest congratulations to Mas Bagas and Mbak Sekar! Sending our best prayers from Surabaya.',
-    timestamp: '3 hari lalu',
-  },
-];
+const FALLBACK_INITIAL_WISHES: WishItem[] = [];
 
 export const RsvpSummaryTab: React.FC<RsvpSummaryTabProps> = ({
   appsScriptUrl,

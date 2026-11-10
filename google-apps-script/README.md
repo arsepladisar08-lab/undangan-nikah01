@@ -1,51 +1,67 @@
-# Panduan Integrasi Google Apps Script & Google Drive / Spreadsheet
+# Google Apps Script Backend — Wedding Invitation
 
-Backend ini memungkinkan Anda untuk:
-1. **Membagikan undangan ke berbagai orang dengan nama masing-masing di halaman pembuka** (`?to=Nama+Tamu`).
-2. **Mengganti / Mengunggah 12 foto undangan langsung ke Google Drive** (disimpan di folder otomatis `"Undangan Pernikahan Bagaskara & Sekar"`).
-3. **Mencatat secara otomatis tautan gambar yang diunggah ke Google Spreadsheet** (pada sheet `"Photos"`).
-4. **Menyimpan daftar tamu dan tautan WhatsApp langsung ke Google Spreadsheet** (pada sheet `"Guests"`).
+Backend untuk Google Sheets dan Google Drive. Kode sumber yang berlaku adalah file ini, `Code.gs`.
 
----
+## Fitur dan batas akses
 
-## Langkah 1: Buat Google Spreadsheet Baru
-1. Buka [Google Sheets](https://sheets.new) di browser Anda.
-2. Beri nama spreadsheet, contoh: `Database Undangan Bagaskara & Sekar`.
+**Publik:** ping, membaca foto publik, membaca konfigurasi audio, membaca feed ucapan RSVP yang memang ditampilkan pada halaman undangan, serta mengirim RSVP.
 
----
+**Admin dengan sesi server:** membaca daftar tamu lengkap, menambah/memperbarui/menghapus tamu, mengunggah foto, mengubah foto, mengubah pengaturan audio, mengganti PIN admin, dan logout.
 
-## Langkah 2: Pasang Kode Google Apps Script
-1. Di Google Spreadsheet tersebut, klik menu **Ekstensi** (Extensions) > **Apps Script**.
-2. Hapus semua kode bawaan di file `Code.gs`.
-3. Buka file `Code.gs` di folder ini (atau klik tombol **"Salin Kode Apps Script"** di panel Admin aplikasi undangan), lalu tempel (paste) seluruh kodenya.
-4. Klik tombol **Simpan** (ikon disket 💾 atau `Ctrl+S` / `Cmd+S`).
+Daftar tamu (termasuk nomor WhatsApp dan catatan) hanya dapat dibaca menggunakan token sesi admin. Jangan membagikan Spreadsheet database kepada publik.
 
----
+## 1. Buat Spreadsheet dan pasang backend
 
-## Langkah 3: Deploy sebagai Web App
-1. Di pojok kanan atas Apps Script, klik tombol biru **Terapkan (Deploy)** > **Penerapan baru (New deployment)**.
-2. Klik ikon gerigi ⚙️ di sebelah *Pilih jenis* (Select type) > pilih **Aplikasi web (Web app)**.
-3. Isi konfigurasi berikut:
-   - **Deskripsi**: `Backend Undangan Pernikahan`
-   - **Jalankan sebagai (Execute as)**: `Saya (email Anda)`
-   - **Yang memiliki akses (Who has access)**: **`Siapa saja (Anyone)`** *(Wajib agar aplikasi web dapat mengunggah foto dan membaca data tanpa login Google)*.
-4. Klik tombol **Terapkan (Deploy)**.
-5. Google akan meminta izin akses (Authorization Required):
-   - Klik **Tinjau izin (Review permissions)**.
-   - Pilih akun Google Anda.
-   - Klik **Lanjutan (Advanced)** > klik **Buka Untitled project (tidak aman)** / nama project Anda.
-   - Klik **Izinkan (Allow)**.
-6. Salin **URL Aplikasi Web** (Web App URL) yang berformat:
-   `https://script.google.com/macros/s/AKfycb.../exec`
+1. Buat Spreadsheet melalui [sheets.new](https://sheets.new).
+2. Buka **Ekstensi → Apps Script**.
+3. Ganti seluruh isi `Code.gs` dengan versi terbaru dari repository: [google-apps-script/Code.gs](https://github.com/arsepladisar08-lab/undangan-nikah01/blob/main/google-apps-script/Code.gs).
+4. Simpan project.
 
----
+## 2. Siapkan PIN admin di server
 
-## Langkah 4: Hubungkan ke Aplikasi Undangan
-1. Buka aplikasi undangan pernikahan.
-2. Klik tombol **"Kelola Undangan & Foto"** di bagian footer atau klik ikon gerigi admin (atau buka url dengan `?admin=1`).
-3. Masuk ke tab **"Pengaturan Google Apps Script"**.
-4. Tempel URL Web App ke kolom **Google Apps Script Web App URL**.
-5. Klik **"Uji Koneksi"**. Bila sukses, status akan berubah menjadi hijau ✅.
-6. Sekarang Anda bisa:
-   - Mengunggah foto baru di tab **"Kelola & Ganti Foto"** (akan otomatis tersimpan di Google Drive & dicatat di Google Sheets).
-   - Menambahkan daftar tamu di tab **"Buku Tamu & Link WhatsApp"** dan menyimpannya ke Google Sheets.
+1. Di editor Apps Script, pilih fungsi `setupAdminPin` lalu klik **Run/Jalankan**.
+2. Berikan izin yang diminta Google.
+3. Masukkan PIN/passphrase unik minimal **10 karakter**. Jangan memakai tanggal lahir, tanggal acara, atau PIN mudah ditebak.
+4. PIN disimpan sebagai salted SHA-256 hash di **Script Properties**, bukan teks biasa.
+5. Sesi login berlaku maksimal 6 jam. Lima percobaan login gagal memicu cooldown global 15 menit.
+
+Jika mengganti PIN, lakukan dari tab keamanan pada panel admin. Sesi saat ini akan berakhir dan pemilik perlu login kembali.
+
+## 3. Deploy sebagai Web App
+
+1. Pilih **Deploy → New deployment → Web app**.
+2. **Execute as:** Me (pemilik script).
+3. **Who has access:** Anyone. Akses publik hanya membuka endpoint yang memang diperlukan undangan; operasi admin tetap memerlukan token sesi yang diverifikasi server-side.
+4. Deploy, berikan izin, lalu salin URL Web App dengan format `https://script.google.com/macros/s/.../exec`.
+
+Saat memperbarui kode di masa depan, pilih **Deploy → Manage deployments → Edit → New version → Deploy**. Menyimpan kode di editor saja tidak memperbarui versi Web App yang sedang aktif.
+
+## 4. Konfigurasikan frontend untuk semua pengunjung
+
+Tambahkan environment variable berikut ke Vercel/Netlify, kemudian redeploy frontend:
+
+```env
+VITE_APPS_SCRIPT_URL=https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
+```
+
+URL ini bukan rahasia. Frontend membutuhkannya agar perangkat tamu yang berbeda dapat membaca foto/audio dan mengirim RSVP ke backend yang sama. Jangan memasukkan PIN admin atau token sesi ke environment variable.
+
+Pada perangkat pemilik, URL juga dapat disimpan melalui tab Pengaturan Google Apps Script sebagai override lokal.
+
+## 5. Verifikasi setelah deployment
+
+- Buka `?action=ping`: harus mengembalikan status sukses.
+- Buka `?action=getPhotos` dan `?action=getAudio`: boleh dibaca publik.
+- Buka `?action=getGuests` tanpa token: harus ditolak.
+- Kirim `saveGuests`, `uploadPhoto`, dan `saveAudio` tanpa token: harus ditolak.
+- Login melalui `?admin=1`; verifikasi bahwa daftar tamu bisa dimuat setelah login.
+- Kirim RSVP dari browser/perangkat lain dan pastikan data masuk ke sheet RSVP.
+
+## Catatan keamanan dan operasional
+
+- Google Apps Script Web App tetap harus dapat dijangkau publik agar tamu dapat RSVP tanpa login Google. Karena itu, **semua operasi tulis admin wajib memeriksa token di server**.
+- Feed RSVP publik memang ditampilkan di undangan. Jangan masukkan data sensitif ke kolom ucapan.
+- Foto yang diunggah dibuat dapat dilihat oleh siapa pun yang memiliki tautan, sesuai kebutuhan galeri publik.
+- Pembatasan login pada Apps Script menggunakan cooldown global karena Apps Script Web App tidak menyediakan alamat IP klien sebagai bagian dari event request standar. Pemilik dapat terkunci sementara jika banyak percobaan gagal.
+- Periksa izin Drive dan Spreadsheet milik akun pemilik. Kegagalan kebijakan berbagi file akan membuat upload gagal secara eksplisit.
+- Jangan mengandalkan localStorage/sessionStorage sebagai otorisasi. Browser hanya menyimpan token sesi; server menentukan apakah token masih sah.
