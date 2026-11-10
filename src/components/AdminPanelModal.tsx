@@ -132,6 +132,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       }
     } catch (err: unknown) {
       console.warn('Auto-save guests error:', err);
+      onShowToast(err instanceof Error ? `Sinkronisasi tamu gagal: ${err.message}` : 'Sinkronisasi tamu gagal.');
     } finally {
       setIsAutoSyncingGuests(false);
     }
@@ -151,13 +152,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         setAppsScriptUrl(savedUrl);
         // Automatically fetch guests from Google Spreadsheet if available
         void fetchGuestsFromAppsScript(savedUrl).then((remoteGuests) => {
-          if (remoteGuests && remoteGuests.length > 0) {
-            setGuests(remoteGuests);
-            localStorage.setItem(GUESTS_STORAGE_KEY, JSON.stringify(remoteGuests));
-            setLastGuestsSyncedAt(new Date());
-          }
-        }).catch(() => {
-          // ignore
+          setGuests(remoteGuests);
+          localStorage.setItem(GUESTS_STORAGE_KEY, JSON.stringify(remoteGuests));
+          setLastGuestsSyncedAt(new Date());
+        }).catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : 'Gagal memuat daftar tamu.';
+          onShowToast(message);
+          if (message.toLowerCase().includes('sesi admin')) onLogoutAdmin?.();
         });
       }
 
@@ -177,33 +178,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
   }, []);
 
-  const initDefaultGuests = (currentDomain?: string) => {
-    const activeBase = getEffectiveBaseUrl(currentDomain);
-    const defaults: GuestItem[] = [
-      {
-        id: 'g_1',
-        name: 'Keluarga Besar Bapak K.R.T. H. Suryo Diningrat',
-        phone: '081234567890',
-        customUrl: generatePersonalizedUrl(activeBase, 'Keluarga Besar Bapak K.R.T. H. Suryo Diningrat'),
-        notes: 'VIP Keluarga Keraton Surakarta',
-      },
-      {
-        id: 'g_2',
-        name: 'Bapak Ir. H. Joko Pramono & Ibu',
-        phone: '081398765432',
-        customUrl: generatePersonalizedUrl(activeBase, 'Bapak Ir. H. Joko Pramono & Ibu'),
-        notes: 'Sahabat Orang Tua Mempelai Pria',
-      },
-      {
-        id: 'g_3',
-        name: 'Dr. Sekar Widuri, Sp.A & Suami',
-        phone: '',
-        customUrl: generatePersonalizedUrl(activeBase, 'Dr. Sekar Widuri, Sp.A & Suami'),
-        notes: 'Teman Kuliah Mempelai Wanita',
-      },
-    ];
-    setGuests(defaults);
-    localStorage.setItem(GUESTS_STORAGE_KEY, JSON.stringify(defaults));
+  const initDefaultGuests = () => {
+    // Never prefill fabricated names or phone numbers into a real event's guest list.
+    setGuests([]);
+    localStorage.setItem(GUESTS_STORAGE_KEY, JSON.stringify([]));
   };
 
   // Save / Update Public Domain (Netlify / Vercel)
@@ -366,6 +344,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       void deleteGuestFromAppsScript(appsScriptUrl.trim(), id).then(() => {
         onShowToast(`Tamu "${name}" dihapus dari perangkat dan server.`);
       }).catch((err: unknown) => {
+        setGuests(guests);
+        localStorage.setItem(GUESTS_STORAGE_KEY, JSON.stringify(guests));
         onShowToast(err instanceof Error ? `Gagal menghapus dari server: ${err.message}` : 'Gagal menghapus tamu dari server.');
       });
     } else {
